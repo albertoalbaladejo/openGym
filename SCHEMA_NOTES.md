@@ -412,3 +412,322 @@ Verificado después: n8n, Open WebUI, Coolify, huerto, hermes y Zammad responden
   cualquier perfil de la instancia. Es una credencial de operador, no un token por usuario.
 * **La doble progresión de openGym sube tras una sesión, no dos.** Tu regla ("techo del rango en
   todas las series durante 2 sesiones seguidas") no es expresable; `double` es lo más cercano.
+
+---
+
+## 11. Reconciliación de fork (2026-09-02, sesión 2)
+
+### 11.1 Qué hay realmente
+
+Hay **tres** repos de GitHub en juego, más el remoto real de GitLab:
+
+| Remoto | URL | HEAD | Permisos de la cuenta logueada (`albertoalbaladejo`) |
+|---|---|---|---|
+| `origin` | `github.com/aalbaladejocortes/openGym` | `c42ba6b` | `pull` sólo — es de otra cuenta |
+| `fork` | `github.com/albertoalbaladejo/openGym` | `c42ba6b` | **`admin`/`push`** ✔ |
+| `upstream-gitlab` | `gitlab.com/DuarteSantos8/opengym` | `272bf78` | lectura |
+
+`albertoalbaladejo/openGym` se creó el **2026-09-02T10:25Z** (durante la sesión anterior), es
+fork de `arvids-unavailable/openGym` (no de `aalbaladejocortes`), es **público**, y tiene
+`main` como rama por defecto. Sólo tiene `fork/main`, **0 tags, 0 workflows registrados**.
+
+### 11.2 El hallazgo que decide el plan
+
+```
+$ git rev-parse fork/main backup/pre-sync-v1.2.4
+c42ba6b98e3776af5981f20c05ba392238799670
+c42ba6b98e3776af5981f20c05ba392238799670   ← el mismo commit
+
+$ git merge-base fork/main main
+SIN ANCESTRO COMUN
+
+$ git rev-list --left-right --count fork/main...main
+5   423
+```
+
+**`fork/main` es exactamente `backup/pre-sync-v1.2.4`**: la misma historia aplastada de 5 commits
+(`asd`, `asd`, `Create render.yaml`, `commit`, `Initial commit`) que tenía
+`aalbaladejocortes/openGym`. Y **no comparte ningún ancestro** con la historia real de GitLab.
+Las dos cadenas de forks de GitHub arrancan de un squash que tiró la historia del proyecto.
+
+Consecuencia operativa: **`git push fork main` no puede ser fast-forward.** Hace falta `--force`
+(o empujar a otra rama y cambiar la rama por defecto). No es un caso de "resolver conflictos":
+son dos árboles de commits inconexos con contenido casi idéntico.
+
+### 11.3 Qué contiene `fork/main` que no debería
+
+`git diff --name-status v1.2.4 fork/main` sobre 2671 ficheros:
+
+* **Borrados** respecto a v1.2.4: `.gitignore`, `.dockerignore`, `.env.example`, y todo
+  `.github/` (workflows, plantillas de issue, dependabot, FUNDING).
+* **Añadidos**: `.DS_Store` en 5 directorios, `nginx.conf` y `render.yaml` sueltos en la raíz,
+  `web/Dockerfile` renombrado a `Dockerfile`, y los ~2670 ficheros de `media/` comiteados.
+* **Añadidos, y esto importa**: `data/db.json`, `data/secret` y `data/vapid.json`.
+
+`data/secret` es la clave HMAC de sesión y `data/vapid.json` contiene la clave privada VAPID —
+en un repositorio **público**. `data/db.json` lleva el uid, el nombre y la clave pública de
+passkey de un tercero (`Arvids`, `piYdx5GveQarq8u9`).
+
+**Esto NO es una fuga de datos tuyos.** Comprobado:
+
+```
+secret comiteado:   1ba7c4c51338dda8c71c64e028d003522abb87f8c87f50ca3fcd2940ea7f7e79
+secret en producción: a45a6a074714e10d9261d2e3f85630c02b46a820cc85d0eb6545d8a7bc385391   ← distinto
+```
+
+Son de `arvids-unavailable`, y ya eran públicos en el repo padre antes de que existiera tu fork.
+Tu instancia generó claves nuevas: el `git reset --hard upstream-gitlab/main` de la sesión
+anterior borró los `data/*` trackeados (en upstream ese directorio está gitignorado), y el
+contenedor `api` creó un `secret` y un `vapid.json` propios en el primer arranque. `db.json` de
+producción está a `0 users`.
+
+Aun así, no hay razón para propagar esos ficheros: el plan de §11.4 los deja fuera de la rama por
+defecto.
+
+### 11.4 Qué está en riesgo y qué no
+
+Los 5 commits de `fork/main` **no contienen nada del trabajo de la sesión anterior** — el endpoint,
+los tests y la documentación viven en `cce7769`, encima de la historia de GitLab. Si un
+force-push los descarta de la rama por defecto, siguen existiendo en cuatro sitios:
+`backup/pre-sync-v1.2.4` en local, el tarball `/home/ubuntu/opengym-backup-20260902.tar.gz`,
+`aalbaladejocortes/openGym`, y el repo padre `arvids-unavailable/openGym`.
+
+### 11.5 Nota sobre los workflows heredados
+
+`albertoalbaladejo/openGym` tiene Actions **habilitadas** (`{"enabled":true,"allowed_actions":"all"}`)
+y **0 workflows registrados**, porque el árbol de `fork/main` borró `.github/`. En cuanto se empuje
+la historia de upstream a `main`, se registrarán y dispararán dos que vienen de upstream y que
+tienen `on: push: branches: [main]`:
+
+* `docker-publish.yml` — publicaría imágenes en el GHCR de tu cuenta;
+* `pages.yml` — desplegaría la demo a GitHub Pages (falla si Pages no está activado).
+
+Ninguno de los dos es algo que quieras en un fork personal. Se tratan en el plan.
+
+### 11.6 Lo que se ejecutó (tras tu confirmación)
+
+```
+$ git push fork main --force-with-lease
+ + c42ba6b...272bf78 main -> main (forced update)
+
+$ git push fork feat/import-plan-api
+ * [new branch]      feat/import-plan-api -> feat/import-plan-api
+
+$ git push fork --tags
+ * [new tag]         v1.2.2 … v1.2.14
+```
+
+Verificación contra la API de GitHub, no contra la salida de `git`:
+
+```
+$ git ls-remote fork refs/heads/main refs/heads/feat/import-plan-api
+cce7769ba6ff43334e02d782005d18f35ab976ff  refs/heads/feat/import-plan-api
+272bf785ee18e0694fe047c60729a5a0e0224938  refs/heads/main
+
+$ gh api /repos/albertoalbaladejo/openGym/commits/cce7769 --jq '.files[].filename' | wc -l
+18
+```
+
+* **PR abierto:** <https://github.com/albertoalbaladejo/openGym/pull/1>.
+* **Workflows heredados desactivados** por API (`disabled_manually`): `docker-publish.yml`,
+  `pages.yml`. El run de `Publish Docker images` que llegó a arrancar con el push se canceló.
+  `test.yml` se dejó **activo** (corre los tests del frontend, es útil). `sync-upstream.yml`
+  todavía no aparece registrado porque vive en la rama del PR: los `schedule:` sólo corren desde
+  la rama por defecto, así que se activará al mergear el PR.
+* **`backup/pre-sync-v1.2.4` NO se empujó**, a propósito (§11.3): empujar esos 5 commits a un
+  repo público volvería a publicar `data/secret` y `data/vapid.json`. Sigue en local, en el
+  tarball, en `aalbaladejocortes/openGym` y en `arvids-unavailable/openGym`.
+* **Remotos de la VPS reordenados**: `origin` → `github.com/albertoalbaladejo/openGym`, y se
+  quitó el remoto `fork` (era el mismo). `aalbaladejocortes` ya no está configurado. `main` y
+  `feat/import-plan-api` siguen a `origin/*`. No hizo falta redesplegar: Docker construye desde
+  el árbol de trabajo, no desde el remoto — contenedores con el mismo uptime antes y después.
+
+---
+
+## 12. i18n — la UI en español
+
+### 12.1 ¿Existe capa de i18n?
+
+Sí, completa, y **el español ya está traducido al 100 %**. No hay que implementar nada.
+
+```
+frontend/src/lib/i18n-core.js   estado + lectores puros (t, exerciseNameFor, dateLocale), Node-safe
+frontend/src/lib/i18n.js        los trozos de Vite/React (import.meta.glob, el hook de suscripción)
+frontend/src/locales/*.js       14 paquetes de idioma
+frontend/src/instr/*.js         instrucciones de ejercicio, 12 idiomas
+frontend/src/exercise-names/*.js  nombres de ejercicio traducidos — sólo 2 idiomas
+```
+
+```js
+// i18n-core.js
+export const LANGS = { en, de, es: 'Español', fr, it, pt, 'pt-BR', pl, tr, ru, zh, ko, hi, th, hu }
+export const INSTR_LANGS = ['en', 'es', 'fr', 'it', 'tr', 'ru', 'zh', 'hi', 'pl', 'ko', 'pt-BR', 'hu']
+export const EXERCISE_NAME_LANGS = ['pt-BR', 'hu']
+```
+
+Cobertura medida:
+
+| Fichero | Claves | Comparación |
+|---|---|---|
+| `locales/es.js` | **719** | idéntico en número a `de`, `fr`, `it` — es decir, completo |
+| `instr/es.js` | presente | el español está en `INSTR_LANGS` |
+| `exercise-names/es.js` | **no existe** | sólo hay `pt-BR.js` y `hu.js` |
+
+Las claves son las propias cadenas inglesas (`'Cancel': 'Cancelar'`), así que una cadena sin
+traducir cae con elegancia al inglés en vez de mostrar un identificador.
+
+Y los dos chunks del español **ya están desplegados**: `assets/es-B6eXLS-1.js` y
+`assets/es-BFUs4tR4.js` dentro del contenedor `web`.
+
+### 12.2 Entonces, ¿por qué la ves en inglés?
+
+Porque openGym **no detecta el idioma del navegador**. `grep -rn "navigator.language" frontend/src`
+no devuelve nada, y el store arranca con:
+
+```js
+// store/useStore.js:12
+unit: 'kg', restSec: 90, …, lang: 'en',
+```
+
+El idioma es un ajuste persistido que empieza en `en` y sólo cambia si lo cambias tú.
+**Arreglo: Ajustes → Idioma → Español.** Cero código.
+
+Queda un cambio *opcional* si quieres que arranque en español solo: leer `navigator.language`
+la primera vez que se crea el estado. Son ~3 líneas en `useStore.js`, pero es una divergencia
+propia con upstream que habrá que reconciliar en cada sync semanal, a cambio de un clic que se
+hace una sola vez.
+
+### 12.3 ¿La capa es→en del endpoint es independiente de lo que se ve en pantalla?
+
+**Completamente.** No se tocan ni comparten nada:
+
+| | `api/exercise-aliases.js` | `frontend/src/exercise-names/` |
+|---|---|---|
+| Dónde corre | servidor, contenedor `api` | navegador |
+| Cuándo | una vez, durante el import | en cada render |
+| Qué hace | frase en español → **id del catálogo** | id → **nombre traducido para mostrar** |
+| Qué escribe | ids en `state-<uid>.json` | nada, es sólo lectura |
+| Idiomas | es → en (68 entradas curadas) | pt-BR, hu |
+
+El import guarda **ids** (`'0025'`), nunca nombres. Cómo se muestre ese id después es asunto
+exclusivo de la capa i18n. Traducir la UI no puede romper un import ya hecho, y cambiar la tabla
+de alias no puede cambiar lo que ves de un plan ya importado.
+
+### 12.4 Alcance real de traducir lo que falta
+
+Sólo faltan los **nombres de ejercicio** (los ~1324 del dataset). El resto ya está.
+
+* **El dataset no trae español.** `hasaneyldrm/exercises-dataset` es sólo inglés: cada entrada
+  tiene un único `n`. Las traducciones de openGym se generan aparte, con los scripts que ya hay
+  en el repo (`scripts/translate-pt-br-exercise-names.mjs`,
+  `scripts/build-pt-br-exercise-names.mjs`, y las fuentes en `scripts/exercise-name-sources/`).
+* **Es un `es.json` de 1324 líneas, no un refactor.** La infraestructura ya existe: bastaría
+  `frontend/src/exercise-names/es.js` + añadir `'es'` a `EXERCISE_NAME_LANGS`. El coste real es
+  la traducción en sí (y su revisión: "lever seated fly" no es "vuelo sentado con palanca"),
+  no la fontanería.
+* Sin eso, la UI en español muestra los nombres de ejercicio en inglés y todo lo demás en
+  español — que es exactamente lo que ven hoy los usuarios de los otros 11 idiomas con
+  instrucciones traducidas.
+
+---
+
+## 13. Por qué "se ve todo móvil" en escritorio
+
+### 13.1 No es un bug del despliegue: el CSS de escritorio se está sirviendo
+
+```
+$ curl -s https://gym.albertoalbaladejo.com/assets/index-DHhuqVQx.css | grep -o '#app{[^}]*}'
+#app{padding:calc(var(--sat) + 8px) var(--pad) calc(128px + var(--sab));max-width:560px;margin:0 auto}
+#app{padding-bottom:calc(250px + var(--sab))}
+#app{max-width:1080px;padding-top:32px}      ← la regla de escritorio, presente en el bundle
+```
+
+El viewport tampoco fuerza nada raro (`frontend/index.html:5`):
+
+```html
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+```
+
+`width=device-width` es lo correcto; no hay `width=375` ni un `max-width` global.
+
+### 13.2 Sí hay diseño de escritorio, y es deliberado
+
+`frontend/src/index.css:1035` — un bloque entero bajo `@media (min-width:1000px)`:
+
+```css
+@media (min-width:1000px){
+  #app{max-width:1080px;padding-top:32px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  #app .list{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .narrow{max-width:640px;margin:0 auto}          /* ← la clave */
+  .tiles{grid-template-columns:repeat(4,1fr)}
+  #tabbar{left:50%;right:auto;bottom:16px;transform:translateX(-50%);width:520px;…}
+  .sheet{…width:640px}   .exmedia img{height:380px}
+}
+```
+
+Sólo hay 4 media queries en toda la hoja: `prefers-reduced-motion`, `width<=400px`,
+`hover:hover` y `width>=1000px`. No hay tablet ni pasos intermedios.
+
+**Por qué sigue pareciendo un móvil ancho:** casi todas las vistas se envuelven en `.narrow`,
+que en escritorio se limita a **640 px**, no a 1080. Sólo dos vistas usan la rejilla `.cols`:
+
+| Vista | Clase | Ancho efectivo en escritorio |
+|---|---|---|
+| Home, Workout, Settings, Admin, RoutineEdit, Login, MobileOnboarding, ErrorBoundary | `.narrow` | **640 px** centrados |
+| Plan, Stats | `.cols` | **1080 px**, dos columnas |
+
+Es decir: el escritorio *funciona*, pero para 8 de las 10 pantallas consiste en ensanchar la
+columna de 560 a 640 px y sacar la barra de pestañas a una píldora flotante centrada. No es un
+fallo tuyo — es la decisión de diseño de upstream (una PWA pensada para el móvil que se deja
+usar en escritorio), y no está escrita en `docs/MOBILE.md`, que sólo habla de las shells de
+Capacitor y no menciona el diseño responsive en ninguna parte.
+
+### 13.3 La única causa plausible de "no se aplica NADA"
+
+El minificador reescribe la media query a sintaxis de rangos de Media Queries Level 4:
+
+```
+fuente:  @media (min-width:1000px)
+bundle:  @media (width>=1000px)
+```
+
+Un navegador que no entienda esa sintaxis **descarta el bloque entero** y se queda en los
+560 px de móvil. Soporte: Chrome/Edge ≥ 104, Firefox ≥ 102, **Safari ≥ 16.4**. `vite.config.js`
+no fija `build.target` ni hay `browserslist`, así que manda el target moderno por defecto de
+Vite.
+
+**Cómo distinguir los dos casos en 10 segundos**, con la ventana maximizada, en DevTools →
+Elements, seleccionando `#app` y mirando el ancho calculado:
+
+* **640 px** (o 1080 en Plan/Stats) → el CSS de escritorio se aplica; lo que ves es el diseño
+  de upstream (§13.2). El arreglo es de diseño, no de despliegue.
+* **560 px** → tu navegador no entiende `(width>=1000px)`. Es un problema de target de build.
+
+### 13.4 Arreglo mínimo propuesto, sin tocar el layout móvil
+
+Todo lo que sigue vive dentro de `@media (min-width:1000px)`, así que **por debajo de 1000 px no
+cambia ni un píxel**.
+
+1. **Si el ancho calculado sale 560 px** — fijar el target de CSS en `vite.config.js` para que la
+   media query se emita en sintaxis clásica:
+   ```js
+   build: { cssTarget: ['chrome87', 'safari14'] }
+   ```
+   Una línea, sin divergencia visual, y arregla también cualquier otra sintaxis moderna que el
+   minificador haya emitido.
+
+2. **Si sale 640 px** — subir `.narrow` en escritorio, que es el único número que mantiene ocho
+   pantallas con aspecto de móvil:
+   ```css
+   @media (min-width:1000px){ .narrow{max-width:820px} }
+   ```
+   Un valor, dentro del bloque que ya existe. 820 px mantiene la línea de texto legible
+   (~90 caracteres) y aprovecha bastante más pantalla.
+
+3. **Opcional, y ya no es mínimo:** poner `Home` y `Settings` en `.cols` como ya están `Plan` y
+   `Stats`. Eso sí toca JSX y hay que mirar pantalla por pantalla si las tarjetas quedan bien en
+   dos columnas. No lo haría sin ver antes capturas.
+
+Recomendación: hacer el diagnóstico de §13.3 primero. Los arreglos 1 y 2 tratan causas
+distintas y sólo uno de los dos es el tuyo.
