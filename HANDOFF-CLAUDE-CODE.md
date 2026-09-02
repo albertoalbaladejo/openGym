@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 5 — IMPORT REAL EJECUTADO. Nada del proyecto queda bloqueado.**
+Última actualización: **2026-09-02, sesión 6 — verificación de cobertura completa. Todo confirmado salvo dos huecos reales en el CARDIO y en el POSTURAL de los días de cardio (§8.2 y §8.3), pendientes de tu decisión.**
 
 ---
 
@@ -472,3 +472,215 @@ estado en el servidor sigue intacto, nadie lo ha pisado.
    sólo los 8 propios en español. No es un fallo: el dataset es sólo inglés y openGym únicamente
    tiene nombres traducidos a pt-BR y húngaro (`SCHEMA_NOTES.md` §12.4). El resto de la interfaz
    y las instrucciones de ejercicio sí están en español.
+
+---
+
+## 8. Sesión 6 — verificación de cobertura contra el plan original
+
+Todo leído del state real (`data/state-3TR-nhgjg3tPyw4R.json`, `_ts 1788352066572`, **intacto**,
+nadie lo ha pisado desde el import) y evaluado con las funciones puras de la app
+(`effectiveRoutine`, `modeOf`, `EXIDX`). **No se reimportó nada.**
+
+### 8.1 Las 25 rutinas — ✅ confirmado, sigue igual
+
+`_ts 1788352066572`, 25 rutinas, 8 `customEx`, 30 entradas de `dayPlan`, 0 workouts.
+**61 ejercicios de fuerza en el plan → 61 colocados en el state. Cero discrepancias**, comprobado
+rutina por rutina (cada una tiene exactamente los ejercicios de su día + los 3 posturales).
+
+### 8.2 Cardio — ⚠️ existe, pero **dos de los tres bloques no están en el calendario**
+
+| Fase | Bloque del plan | Rutina en el state | Programada |
+|---|---|---|---|
+| 1 | caminata rápida o bici, 25-30 min, Martes+Sábado | ✅ `F1 · Cardio moderado` — `mode: cardio`, `min: 25`, nota `"moderada"` | ✅ **Martes y Sábado** |
+| 2 | intervalos moderados, 20 min, 2-3×/semana | ✅ `F2 · Cardio intervalos` — `mode: cardio`, `min: 20`, nota `"2-3x/semana"` | ❌ **ningún día** |
+| 3 | HIIT corto, 15-20 min, 2×/semana | ✅ `F3 · HIIT corto` — `mode: cardio`, `min: 15`, nota `"2x/semana · 30s fuerte / 90s suave"` | ❌ **ningún día** |
+| 3 | cardio suave, 30 min, 1×/semana | ✅ `F3 · Cardio suave` — `mode: cardio`, `min: 30`, nota `"1x/semana"` | ❌ **ningún día** |
+
+Los cuatro tienen además su gemela de descarga.
+
+**Por qué**, y no es un fallo del import: el plan original **sólo da días concretos para el cardio
+de la Fase 1** (`"days": ["Martes","Sábado"]`). Para las fases 2 y 3 dice `"variable",
+"2-3x/semana"`, `"2x/semana"`, `"1x/semana"` — frecuencias, no días de la semana. Y openGym
+programa por día de la semana (`S.week[0..6]`), no por frecuencia: no existe "dos veces por
+semana, tú eliges cuándo". El importador guardó la frecuencia en la nota del ejercicio, creó la
+rutina, y avisó de que no podía programarla.
+
+Opciones, todas sin reimportar el plan entero:
+
+1. **Asignar los días a mano en la app** cuando llegue cada fase. Es un gesto en la vista Plan,
+   y es lo más fiel: tú decides cada semana qué día toca según cómo vayas.
+2. **Fijar días en el plan y reimportar.** Cambiar `"days": []` por, p.ej., `["Martes","Jueves"]`
+   en la Fase 2. El import es idempotente: actualizaría las rutinas por nombre sin duplicar nada.
+   Pierdes la flexibilidad de "2-3 veces, cuando pueda".
+3. **Dejarlo como está.** Las rutinas existen y se pueden empezar a mano desde la vista Plan
+   cualquier día, sin estar en el calendario.
+
+### 8.3 Rutina postural diaria — ✅ en los días de fuerza y de descanso, ❌ **en los de cardio**
+
+Verificados los dos casos que pediste, con `effectiveRoutine()` sobre el state real:
+
+* **Día de fuerza** (miércoles 2026-09-09 → `F1 · Full Body`, 13 ejercicios): los tres posturales
+  van **anexados al final**, posiciones #11 *Chin tucks*, #12 *Estiramiento de pectoral* (`mode:
+  time`, 0:30), #13 *Wall angels*, todos con `note` que empieza por `postural`.
+* **Día de descanso** (jueves 2026-09-10 → `Postural diario`, 3 ejercicios): la rutina
+  independiente, con los mismos tres.
+
+Cobertura: **16/16 rutinas de fuerza** (incluidas las 8 de descarga) llevan el bloque. **0/8**
+rutinas de cardio lo llevan.
+
+**El hueco:** el plan dice *"Rutina diaria postural (todos los días)"*. Con la Fase 1 activa, el
+postural aparece **5 de 7 días** — falta **martes y sábado**, que son los de cardio. Es una
+decisión de diseño mía en el importador (no anexar un bloque de movilidad a un bloque de cardio)
+que no coincide con lo que pide tu plan. **Arreglo:** un flag en el payload para los días de
+cardio y reimportar (idempotente, no duplica). **No lo he tocado** — la regla de seguridad dice
+parar y preguntar antes de escribir.
+
+### 8.4 Semanas de descarga — ✅ las 6, en las fechas correctas
+
+Partiendo del lunes 2026-09-07 asumido como semana 1:
+
+| Semana | Fechas | Rutinas |
+|---|---|---|
+| 4 | 28-30 sep, 2-3 oct | `F1 · … (descarga)` ×5 |
+| 8 | 26-28 oct, 30-31 oct | `F1 · … (descarga)` ×5 |
+| 12 | 23, 24, 26, 27 nov | `F2 · … (descarga)` ×4 |
+| 16 | 21, 22, 24, 25 dic | `F2 · … (descarga)` ×4 |
+| 20 | 18-23 ene 2027 | `F3 · … (descarga)` ×6 |
+| 24 | 15-20 feb 2027 | `F3 · … (descarga)` ×6 |
+
+**Semanas cubiertas: 4, 8, 12, 16, 20, 24** — exactamente las que pide el plan. Las 30 entradas de
+`dayPlan` apuntan **todas** a una rutina con `excludeFromProgression: true`.
+
+**La reducción de volumen es del 33-41 %, no del 40 % exacto**, y es inevitable: se aplica por
+ejercicio sobre un número entero de series. `3 × 0.6 = 1.8 → 2 series` es un recorte del 33 %;
+`4 × 0.6 = 2.4 → 2` es del 50 %. Agregado por rutina:
+
+```
+F1 · Full Body   39 → 26 series  (−33%)    mismo peso ✔  mismas reps ✔
+F2 · Torso A     38 → 24 series  (−37%)    mismo peso ✔  mismas reps ✔
+F3 · Legs        34 → 20 series  (−41%)    mismo peso ✔  mismas reps ✔
+```
+
+Peso y repeticiones intactos en las tres, como pide el plan ("−40% volumen, mismo peso").
+
+### 8.5 Detalles finos — ✅ todos sobrevivieron
+
+**Pesos iniciales y descansos** (`F1 · Full Body`, la única rutina donde el plan los especifica):
+**8/8** con peso inicial y **10/10** con descanso propio. El extremo inferior del rango va a
+`weight` y el texto original a la nota, como se diseñó:
+
+```
+plan  w=20-30           rest=90  →  weight=20  restSec=90  note="20-30"
+plan  w=10-15 por lado  rest=90  →  weight=10  restSec=90  note="10-15 por lado"
+plan  w=8-12 por lado   rest=60  →  weight=8   restSec=60  note="8-12 por lado"
+plan  w=5-9  (face pull) rest=45 →  weight=5   restSec=45  note="postural · 5-9"
+```
+
+Los 3 posturales no llevan peso ni descanso propio, que es correcto — el plan no se los da.
+
+**Superserie de Torso A:** `dumbbell biceps curl` (#7) y `cable pushdown` (#8) comparten
+`sg: "sg1"` y son **contiguos**, así que `history.js` no los desagrupará. Sobrevive también en
+`F2 · Torso A (descarga)`.
+
+**Isométricos:** 21 entradas con `mode: 'time'` en todo el state — las dos planchas y el
+estiramiento de pectoral, todas en `0:30` y ninguna convertida en repeticiones.
+
+### 8.6 Estado del checklist
+
+| Punto | Estado |
+|---|---|
+| 25 rutinas de fuerza | ✅ confirmado |
+| Cardio representado en el state | ✅ las 4 rutinas existen con su modo, minutos y frecuencia |
+| Cardio programado en el calendario | ⚠️ **sólo el de Fase 1** — §8.2, decisión tuya |
+| Postural en día de fuerza | ✅ |
+| Postural en día de descanso | ✅ |
+| Postural en día de cardio | ❌ **falta** — §8.3, decisión tuya |
+| Descargas: fechas | ✅ las 6 semanas correctas |
+| Descargas: −40 % volumen, mismo peso | ✅ (−33 a −41 % por el redondeo a series enteras) |
+| Pesos iniciales | ✅ 8/8 |
+| Descansos | ✅ 10/10 |
+| Superserie Torso A | ✅ contigua y agrupada |
+| Isométricos en segundos | ✅ 21/21 |
+
+---
+
+## 9. Guía de uso desde el móvil
+
+### 9.1 Qué me toca hoy
+
+Pestaña **Home** (la casita). Arriba, tu nombre y la fecha; debajo, una tarjeta con la **tira de
+la semana** (flechas ‹ › para ver semanas anteriores o siguientes) y, justo bajo ella, la fila
+**Hoy**:
+
+* Si toca entrenar → el nombre de la rutina y una etiqueta verde **Empezar**. Un toque la abre.
+* Si es descanso → *Día de descanso*. Con tu plan esto no pasa nunca: los siete días tienen algo,
+  y jueves y domingo son `Postural diario`.
+* Si ya entrenaste hoy → *… — hecho*, con una marca verde.
+* Debajo aparece **Próxima sesión: <día>, <rutina>**.
+
+No hace falta ir al calendario: **Home ya te dice el día**. La pestaña **Plan** es para ver y
+editar la semana entera y la lista de las 25 rutinas.
+
+### 9.2 Registrar una sesión
+
+Toca **Empezar** en Home (o el botón central grande de la barra). Dentro:
+
+1. Los ejercicios salen en orden, cada uno con sus series y el objetivo (`4 × 8-10 · 20 kg`).
+2. Por cada serie: escribes el peso y las repeticiones **que realmente hiciste** y marcas la
+   serie. El temporizador de descanso arranca solo con los segundos de ese ejercicio (90/60/45
+   según lo que puso el plan).
+3. La superserie de `F2 · Torso A` sale enlazada: alterna entre los dos ejercicios sola.
+4. Al terminar, **Finalizar**. La sesión se guarda en el historial.
+
+**Cómo alimenta la doble progresión.** La regla lee la sesión con honestidad:
+
+* serie marcada llegando al objetivo → acierto;
+* serie marcada con menos repeticiones → fallo (se registra lo que hiciste);
+* serie sin marcar, o menos series de las prescritas → fallo.
+
+Cuando llegas al **techo del rango en todas las series** (los `8-10`, `10-12`, `13-15` que
+rellenó el import), la próxima vez la app sube el peso y te devuelve al suelo del rango. Si te
+quedas corto tres sesiones seguidas, baja el peso un 10 %.
+
+Un matiz que ya sabes: tu plan pedía subir tras **dos** sesiones seguidas en el techo; openGym
+sube tras **una**. No es configurable. Si quieres respetar tu regla, no marques la subida como
+buena hasta repetirla — o simplemente deja que suba y baja el peso a mano si se te atraganta.
+
+### 9.3 Qué pasa en una semana de descarga
+
+**Nada automático, y la app no te avisa.** Lo que ves es que ese día la fila **Hoy** dice
+`F1 · Full Body (descarga)` en vez de `F1 · Full Body`, y dentro hay menos series con el mismo
+peso. Eso es todo el aviso: **el nombre**.
+
+Por dentro sí pasa algo importante: esas rutinas llevan activado *"Excluir de la progresión
+automática"*, así que **una semana de descarga no cuenta como "la última vez"**. Al volver a la
+semana normal, el objetivo sigue desde la última sesión buena, no desde la descarga. Sin eso, una
+semana suave te habría hecho retroceder el peso.
+
+Las descargas ya están puestas en el calendario hasta febrero de 2027 (30 días). No tienes que
+acordarte.
+
+### 9.4 ¿Puedo tocar cosas a mano?
+
+**Sí, y es seguro.** La progresión no guarda contadores en ningún sitio: se **recalcula desde el
+historial cada vez que hace falta**. Consecuencias prácticas:
+
+* **Cambiar un peso o unas reps en la rutina** (Plan → la rutina → el ejercicio): cambia el
+  objetivo desde la próxima sesión. No rompe nada.
+* **Saltarte un ejercicio**: déjalo sin marcar. Cuenta como fallo para *ese* ejercicio y para
+  ninguno más. Si lo vas a saltar siempre, mejor bórralo de la rutina.
+* **Corregir una sesión mal registrada** (Historial → la sesión): el objetivo siguiente se
+  recalcula solo con el dato corregido. Esto es justo lo que el diseño buscaba.
+* **Cambiar de fase** (semana 9 y semana 17): las rutinas `F2 ·` y `F3 ·` ya existen. Sólo hay que
+  reasignar los días en la vista Plan. Dímelo y lo hago con un import de 10 segundos.
+
+Tres cosas a tener en cuenta:
+
+1. **Los tres últimos ejercicios de cada rutina son el bloque postural** (chin tucks,
+   estiramiento, wall angels). Si los borras de una rutina, desaparecen sólo de esa.
+2. **No renombres las rutinas** si quieres poder reimportar el plan. El import empareja por
+   **nombre**: `F2 · Torso A` renombrado a "Torso A" haría que un reimport creara una rutina nueva
+   en vez de actualizar la tuya.
+3. **Antes de que yo lance cualquier import, cierra la app.** El móvil y el import escriben el
+   mismo fichero, y el que llega el último gana. El endpoint detecta el conflicto si le paso el
+   `state_ts` correcto, pero lo más simple es no tenerla abierta.
