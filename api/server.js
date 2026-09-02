@@ -13,6 +13,8 @@ import {
 import webpush from 'web-push';
 import { dayReminderPush, restTimerPush, testPush } from './push-messages.js';
 import { verifyError } from './verify-error.js';
+import { importPlan } from './import-plan.js';
+import { uid } from '../frontend/src/lib/format.js';
 
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
@@ -33,6 +35,21 @@ const ALLOW_GUEST = !/^(0|false|no|off)$/i.test(process.env.ALLOW_GUEST || '');
 // internet don't want the same number. Only affects cookies minted from now on — the expiry is
 // baked into each cookie when it's issued, so lowering this never cuts an existing session short.
 const SESSION_DAYS = Math.max(1, +(process.env.SESSION_DAYS || 90) || 90);
+// Plan import (POST /api/admin/import-plan). A SERVICE credential, not a session: the caller is
+// a script or an automation, which has no passkey and no cookie jar, so requireAdmin cannot
+// apply. Two deliberate properties:
+//   · Unset means 501, not "unauthenticated". An instance whose operator never asked for this
+//     must not ship a write path into somebody's training plan at all — "off" and "open" are
+//     not allowed to be the same state.
+//   · The key grants full write access to the named profile's plan. It is compared in constant
+//     time, never logged, and never reaches the frontend. See docs/SELF_HOSTING.md.
+const IMPORT_API_KEY = (process.env.IMPORT_API_KEY || '').trim();
+// Modest by design: an import is a thing you run by hand or on a schedule, never in a loop.
+// The cap exists so a leaked-key guess cannot be brute-forced at wire speed, and so a runaway
+// script cannot rewrite state-<uid>.json thousands of times.
+const IMPORT_RATE_MAX = Math.max(1, +(process.env.IMPORT_RATE_MAX || 10) || 10);
+const IMPORT_RATE_WINDOW_MS = Math.max(1000, (+(process.env.IMPORT_RATE_WINDOW_S || 300) || 300) * 1000);
+
 const MAX_BODY = 5 * 1024 * 1024;
 // Secure cookies require HTTPS; over plain http://localhost the flag would drop the cookie
 const SECURE = /^https:/i.test(ORIGIN) ? ' Secure;' : '';
@@ -521,6 +538,75 @@ if (AUDIT_ON) {
   setInterval(compactAudit, 3600000).unref();    // honour AUDIT_DAYS on an idle instance too
 }
 
+/* ---------- plan import: service auth, rate limit, backup ---------- */
+
+// Fixed window per peer, in memory. Same shape as the presence and challenge maps above: no
+// new dependency, and nothing that survives a restart (a restart is not a way past it — the
+// key is still the key). The address is a bucket label only; it is never written anywhere.
+const importHits = new Map();                 // peer -> { n, reset }
+setInterval(() => { const now = Date.now(); for (const [k, v] of importHits) if (v.reset < now) importHits.delete(k); }, 60000).unref();
+const peerKey = req => req.socket?.remoteAddress || 'unknown';
+
+function importRateOk(req) {
+  const now = Date.now();
+  const k = peerKey(req);
+  const cur = importHits.get(k);
+  if (!cur || cur.reset < now) { importHits.set(k, { n: 1, reset: now + IMPORT_RATE_WINDOW_MS }); return { ok: true }; }
+  cur.n++;
+  if (cur.n > IMPORT_RATE_MAX) return { ok: false, retryAfter: Math.ceil((cur.reset - now) / 1000) };
+  return { ok: true };
+}
+
+// Constant-time, and length-safe: timingSafeEqual throws on a length mismatch, which would
+// otherwise leak the key's length through a 500 instead of a 401.
+function keyMatches(given) {
+  const a = Buffer.from(String(given || ''), 'utf8');
+  const b = Buffer.from(IMPORT_API_KEY, 'utf8');
+  if (a.length !== b.length) { crypto.timingSafeEqual(b, b); return false; }
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** 501 when the feature was never configured, 429 when hammered, 401 on a wrong key. */
+function requireImportKey(req, res) {
+  if (!IMPORT_API_KEY) {
+    json(res, 501, { error: 'plan import is not enabled on this instance', hint: 'set IMPORT_API_KEY in .env and restart the api container' });
+    return false;
+  }
+  const rate = importRateOk(req);
+  if (!rate.ok) { json(res, 429, { error: 'too many import requests' }, { 'Retry-After': String(rate.retryAfter) }); return false; }
+  if (!keyMatches(req.headers['x-import-key'])) {
+    // Audited without the key, obviously, and without a body: this route is reachable by
+    // anyone who can see the port, and the operator wants to know it was knocked on.
+    audit(req, 'import.denied', { ok: false, msg: 'bad or missing X-Import-Key' });
+    json(res, 401, { error: 'bad or missing X-Import-Key' });
+    return false;
+  }
+  return true;
+}
+
+/** Copy state-<uid>.json aside before overwriting it. Returns the backup's name, or null. */
+function backupState(uid_) {
+  const file = stateFile(uid_);
+  if (!fs.existsSync(file)) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const dest = `${file}.bak-${stamp}`;
+  fs.copyFileSync(file, dest);
+  return path.basename(dest);
+}
+
+// The shape a profile's state has before anything has ever been synced. Mirrors the frontend's
+// own defaults (and mcp/src/state.js's defaultsShape) so an import into a brand-new profile
+// produces a state the app can read rather than a fragment it has to repair.
+function emptyState() {
+  return {
+    unit: 'kg', restSec: 90, sound: true, lang: 'en',
+    theme: 'dark', accent: 'lime', body: 'male', targetW: null,
+    bodyweight: [], routines: [], week: {}, dayPlan: {},
+    exWeights: {}, workouts: [], customEx: [], gifSize: 'full',
+    reminder: { on: false, time: '08:00', tz: null }
+  };
+}
+
 /* ---------- routes ---------- */
 const routes = {
   'GET /api/health': async (req, res) => json(res, 200, { ok: true, users: db.users.length }),
@@ -940,6 +1026,71 @@ const routes = {
     auditCount = 0;
     audit(req, 'admin.audit.clear', { user: admin });
     json(res, 200, { ok: true });
+  },
+
+  /* ---------- plan import (service key, not a session) ---------- */
+  // Deliberately separate from every route above it: it does not read a session, does not touch
+  // db.json, and cannot create, rename or disable a profile. All it can do is rewrite the plan
+  // half of one existing state-<uid>.json — after copying the old one aside.
+  'POST /api/admin/import-plan': async (req, res) => {
+    if (!requireImportKey(req, res)) return;
+
+    let body;
+    try { body = await readBody(req); }
+    catch (e) { return json(res, 400, { error: e.message }); }
+
+    const q = new URL(req.url, 'http://x').searchParams;
+    // The instance is usually one person's, so a single profile needs no naming. More than one
+    // and the caller has to say which — guessing would write someone else's plan.
+    const asked = String(q.get('user_id') || body.user_id || '').trim();
+    let user = null;
+    if (asked) user = db.users.find(u => u.id === asked) || db.users.find(u => (u.name || '').toLowerCase() === asked.toLowerCase()) || null;
+    else if (db.users.length === 1) user = db.users[0];
+    if (!user) {
+      return json(res, 404, {
+        error: asked ? `no profile with id or name "${asked}"` : 'this instance has ' + db.users.length + ' profiles — pass user_id',
+        profiles: db.users.map(u => ({ id: u.id, name: u.name }))
+      });
+    }
+
+    const dry = /^(1|true|yes|on)$/i.test(String(q.get('dry_run') || body.dry_run || ''));
+
+    // Read-modify-write, the same way the web UI's PUT /api/data does. There is no lock between
+    // the two (see mcp/README.md's Phase 2 note): a browser that syncs while an import is in
+    // flight can still overwrite it. Import with the app closed — documented, not pretended away.
+    const state = readState(user.id) || emptyState();
+    let summary;
+    try { summary = importPlan(state, body, { uid }); }
+    catch (e) { return json(res, e.status || 400, { error: e.message }); }
+
+    let backup = null;
+    if (!dry) {
+      backup = backupState(user.id);
+      delete state.active;                    // in-progress workouts stay device-local
+      atomicWrite(stateFile(user.id), JSON.stringify(state));
+    }
+
+    audit(req, 'import.plan', {
+      user,
+      msg: `${dry ? 'dry-run: ' : ''}${summary.routines.created.length} created, ${summary.routines.updated.length} updated, ${summary.exercises.custom_created.length} custom`
+    });
+
+    json(res, 200, {
+      ok: true,
+      dry_run: dry,
+      user_id: user.id,
+      backup,
+      counts: {
+        routines_created: summary.routines.created.length,
+        routines_updated: summary.routines.updated.length,
+        exercises_matched: summary.exercises.matched.length,
+        exercises_custom_created: summary.exercises.custom_created.length,
+        exercises_custom_reused: summary.exercises.custom_reused.length,
+        exercises_unresolved: summary.exercises.unresolved.length,
+        day_overrides: summary.day_overrides
+      },
+      ...summary
+    });
   }
 };
 

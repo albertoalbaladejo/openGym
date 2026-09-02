@@ -1,0 +1,173 @@
+# Weekly check against the project's REAL upstream.
+#
+# openGym's GitHub home (DuarteSantos8/openGym) is a suspended account; active development
+# moved to gitlab.com/DuarteSantos8/opengym. This fork therefore tracks GitLab, not GitHub.
+#
+# It opens a PULL REQUEST rather than merging, because this fork carries its own changes —
+# POST /api/admin/import-plan lives in api/, on top of the same files upstream edits most.
+# A conflict is reported in the PR description, never swallowed.
+name: Sync from upstream (GitLab)
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'      # Mondays, 06:17 UTC
+  workflow_dispatch:           # …and on demand
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://gitlab.com/DuarteSantos8/opengym.git
+  # Files where a conflict matters most: this fork's own endpoint lives here.
+  FORK_OWNED: 'api/ scripts/import-plan.mjs docs/IMPORT_API.md SCHEMA_NOTES.md docker-compose.yml .env.example'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this fork (full history — the comparison needs it)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        id: fetch
+        run: |
+          set -euo pipefail
+          git remote add upstream-gitlab "$UPSTREAM" 2>/dev/null || git remote set-url upstream-gitlab "$UPSTREAM"
+          git fetch upstream-gitlab --tags --prune
+          AHEAD=$(git rev-list --count origin/main..upstream-gitlab/main)
+          echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+          echo "Upstream is $AHEAD commit(s) ahead of this fork's main."
+
+      - name: Nothing to do
+        if: steps.fetch.outputs.ahead == '0'
+        run: echo "Already up to date with upstream-gitlab/main — no PR."
+
+      - name: Work out what a merge would do
+        if: steps.fetch.outputs.ahead != '0'
+        id: plan
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          BRANCH="sync/upstream-$DATE"
+          # A branch may already exist from an earlier run in the same week.
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            BRANCH="sync/upstream-$DATE-$(date -u +%H%M)"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          # Dry-run the merge in a scratch worktree so the checkout stays clean either way.
+          # This is what tells the PR description whether a human has to resolve anything —
+          # the alternative is a green PR that turns out to be unmergeable when it is opened.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git worktree add --detach /tmp/mergecheck origin/main >/dev/null
+          CONFLICTS=""
+          if ! git -C /tmp/mergecheck merge --no-commit --no-ff upstream-gitlab/main >/dev/null 2>&1; then
+            CONFLICTS=$(git -C /tmp/mergecheck diff --name-only --diff-filter=U || true)
+          fi
+          git -C /tmp/mergecheck merge --abort 2>/dev/null || true
+          git worktree remove --force /tmp/mergecheck
+
+          {
+            echo "conflicts<<EOF"
+            echo "$CONFLICTS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          # Does any conflict land on a file this fork owns? That is the one a human must see.
+          HOT=""
+          for f in $CONFLICTS; do
+            for owned in $FORK_OWNED; do
+              case "$f" in "$owned"*) HOT="$HOT $f";; esac
+            done
+          done
+          {
+            echo "hot<<EOF"
+            echo "$HOT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Push the upstream commits onto a branch of this fork
+        if: steps.fetch.outputs.ahead != '0'
+        run: git push origin "upstream-gitlab/main:refs/heads/${{ steps.plan.outputs.branch }}"
+
+      - name: Open the pull request
+        if: steps.fetch.outputs.ahead != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.plan.outputs.branch }}
+          AHEAD: ${{ steps.fetch.outputs.ahead }}
+          CONFLICTS: ${{ steps.plan.outputs.conflicts }}
+          HOT: ${{ steps.plan.outputs.hot }}
+        run: |
+          set -euo pipefail
+          BODY=$(mktemp)
+
+          if [ -n "$(echo "$HOT" | tr -d '[:space:]')" ]; then
+            {
+              echo "## ⛔ Conflicts in this fork's own files — do not merge blind"
+              echo
+              echo "The upstream changes collide with files this fork modifies itself:"
+              echo
+              for f in $HOT; do echo "- \`$f\`"; done
+              echo
+              echo "\`api/\` is where \`POST /api/admin/import-plan\` lives (\`server.js\`, \`import-plan.js\`,"
+              echo "\`exercise-resolve.js\`, \`exercise-aliases.js\`, and the Dockerfile's repo-root build context)."
+              echo "Resolve by hand, keep the endpoint, and re-run \`cd api && node --test\` before merging."
+              echo
+            } >> "$BODY"
+          elif [ -n "$(echo "$CONFLICTS" | tr -d '[:space:]')" ]; then
+            {
+              echo "## ⚠️ Conflicts, outside this fork's own files"
+              echo
+              for f in $CONFLICTS; do echo "- \`$f\`"; done
+              echo
+            } >> "$BODY"
+          else
+            {
+              echo "## ✅ Merges cleanly"
+              echo
+              echo "No conflicts against \`main\` at the time this PR was opened."
+              echo
+            } >> "$BODY"
+          fi
+
+          {
+            echo "## What is new upstream"
+            echo
+            echo "**$AHEAD commit(s)** from [gitlab.com/DuarteSantos8/opengym](https://gitlab.com/DuarteSantos8/opengym)."
+            echo
+            echo '```'
+            git log --oneline --no-decorate -40 origin/main..upstream-gitlab/main
+            echo '```'
+            echo
+            echo "## Files touched"
+            echo
+            echo '```'
+            git diff --stat origin/main...upstream-gitlab/main | tail -30
+            echo '```'
+            echo
+            echo "---"
+            echo
+            echo "Opened automatically by \`.github/workflows/sync-upstream.yml\`. This fork tracks GitLab"
+            echo "because the project's GitHub account is suspended — see the README."
+          } >> "$BODY"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync from upstream GitLab ($AHEAD commits)" \
+            --body-file "$BODY" \
+            --label "upstream-sync" || \
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync from upstream GitLab ($AHEAD commits)" \
+            --body-file "$BODY"

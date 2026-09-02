@@ -157,6 +157,52 @@ same device.
 Prefer to keep the whole thing off the open internet? A VPN or an auth proxy (Authelia, Cloudflare
 Access…) in front still works, and composes with the above.
 
+## Plan import API
+
+*(Fork-only. Not part of upstream openGym — see the [README](../README.md#this-fork).)*
+
+`POST /api/admin/import-plan` writes a whole training plan into one profile's
+`state-<uid>.json` from a script, without going through the UI. Full reference:
+**[docs/IMPORT_API.md](IMPORT_API.md)**.
+
+It is **off by default, and off means inert**: with `IMPORT_API_KEY` unset the route answers
+`501` and does nothing. An instance nobody configured for this does not get a half-open write
+path into somebody's training plan.
+
+To enable it:
+
+```bash
+openssl rand -hex 32          # → put the result in .env as IMPORT_API_KEY
+docker compose up -d --build  # the endpoint needs the API built from source
+```
+
+```bash
+IMPORT_API_KEY=<64 hex characters>
+IMPORT_RATE_MAX=10            # optional — requests per window, per peer address
+IMPORT_RATE_WINDOW_S=300      # optional — the window, in seconds
+```
+
+> ⚠️ **`IMPORT_API_KEY` is a service credential with full write access to the training plan of
+> every profile on this instance.** It is not scoped to a user, it is not a per-user token, and
+> anyone holding it can overwrite your routines, your custom exercises and your weekly schedule.
+>
+> Treat it exactly like `./data/secret`: keep it in `.env` and nowhere else. **Never** ship it to
+> the frontend, never put it in a URL or a query string, never commit it, and never paste it into
+> a log or an issue. The API compares it in constant time and never writes it to `./data/audit.log`
+> — an import is logged as `import.plan`, a rejected one as `import.denied`, neither with the key.
+> If it leaks, replace it in `.env` and `docker compose up -d api`; every old key stops working
+> immediately.
+
+What it can and cannot reach: it writes `routines`, `week`, `dayPlan` and `customEx` inside one
+`state-<uid>.json`, after copying the previous file to `state-<uid>.json.bak-<timestamp>`. It
+never touches `db.json` (profiles, passkeys, push subscriptions, invite codes), never touches
+logged `workouts` or `bodyweight`, and does not go anywhere near the WebAuthn flow — it reads no
+session and cannot create, rename, disable or authenticate a profile.
+
+One operational caveat: the endpoint does read-modify-write on the state file, and so does the
+app's own `PUT /api/data`. There is no lock between them, so a browser syncing mid-import can
+overwrite it. Run imports with the app closed.
+
 ## 5. Fitting it into an existing stack
 
 The defaults assume openGym is the only thing here: a service called `api` on port 3000, and nginx
