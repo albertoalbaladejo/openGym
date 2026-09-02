@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 4 — blindaje del endpoint (OpenAPI + expected_ts + state_ts) hecho, 48/48 tests. SIGUE BLOQUEADO el import real: el perfil de passkey todavía no existe.**
+Última actualización: **2026-09-02, sesión 5 — IMPORT REAL EJECUTADO. Nada del proyecto queda bloqueado.**
 
 ---
 
@@ -316,3 +316,159 @@ es `DENY` — que es lo que openGym quiere. Es duplicación cosmética, no un fa
 quitando las cabeceras duplicadas de `/etc/nginx/sites-available/gym.albertoalbaladejo.com`.
 **No lo he tocado** porque implica editar el vhost y recargar nginx por algo puramente estético.
 Dime si quieres que lo limpie.
+
+---
+
+## 7. Sesión 5 — el import real, ejecutado
+
+### 7.1 Passkey verificada en el servidor
+
+```
+$ curl -s https://gym.albertoalbaladejo.com/api/health
+{"ok":true,"users":1}                     ← antes era 0
+```
+
+`data/db.json`:
+
+| campo | valor |
+|---|---|
+| `users[0].id` | `3TR-nhgjg3tPyw4R` |
+| `users[0].name` | `Alberto` |
+| `users[0].created` | `2026-09-02T12:24:47.463Z` |
+| `creds[0].id` | `nvH4clNKoHbEuBznfGnVgg01aek` |
+| `creds[0].publicKey` | `pQECAyYgASFYIFevLBhZL-X5ooAwf9ftDAHZa_qCWyYXdtGtBv8n-x-dIlgg…` (COSE EC2 P-256) |
+| `creds[0].transports` | `["internal", "hybrid"]` — autenticador de plataforma + cross-device |
+| `creds[0].counter` | `0` |
+
+Audit log: `{"id":7,"ts":1788351887463,"ev":"auth.register.ok","ok":true,"uid":"3TR-nhgjg3tPyw4R","name":"Alberto"}`.
+
+La app además ya había sincronizado un estado inicial con `lang: "es"` y `weekStart: 1`, así que
+el cambio de idioma también quedó hecho.
+
+### 7.2 Copias de seguridad antes de escribir
+
+| Copia | Ruta |
+|---|---|
+| Manual (extra) | `data/state-3TR-nhgjg3tPyw4R.json.manual-20260902T122733Z` |
+| Manual, fuera de `./data` | `/home/ubuntu/state-alberto-pre-import-20260902T122733Z.json` |
+| Automática del endpoint | `data/state-3TR-nhgjg3tPyw4R.json.bak-2026-09-02T12-27-46-572Z` |
+
+### 7.3 Dry-run — coincide exactamente con los tres preflights anteriores
+
+```
+state_ts    1788351896187   (unchanged — pass this to --expected-ts)
+routines    25 created, 0 updated
+exercises   60 matched in the catalogue, 8 created as custom, 0 custom reused
+calendar    30 day overrides would be written (deload weeks)
+```
+
+`expected_ts` **no** fue `null`: la app ya había sincronizado un estado inicial, así que el valor
+correcto era `1788351896187`. Exactamente el caso para el que se construyó el mecanismo.
+
+### 7.4 Ejecución real — el resumen exacto que devolvió el endpoint
+
+```
+✓ imported  ·  profile 3TR-nhgjg3tPyw4R
+  backup      state-3TR-nhgjg3tPyw4R.json.bak-2026-09-02T12-27-46-572Z
+  state_ts    1788352066572   (pass this to --expected-ts next time)
+  routines    25 created, 0 updated
+  exercises   60 matched in the catalogue, 8 created as custom, 0 custom reused
+  calendar    30 day overrides written (deload weeks)
+
+  Created as custom exercises (not in the dataset):
+    · Chin tucks                                    →  neck
+    · Estiramiento de pectoral en marco de puerta   →  chest
+    · Wall angels                                   →  shoulders
+    · Plancha frontal                               →  waist
+    · Plancha lateral                               →  waist
+    · intervalos moderados cinta o bici             →  cardio
+    · HIIT corto                                    →  cardio
+    · cardio suave                                  →  cardio
+
+  Week:
+    Mon  F1 · Full Body        Tue  F1 · Cardio moderado    Wed  F1 · Full Body
+    Thu  Postural diario       Fri  F1 · Full Body          Sat  F1 · Cardio moderado
+    Sun  Postural diario
+```
+
+* **`state_ts` final: `1788352066572`.**
+* **Ejercicios sin resolver: 0.**
+* Audit: `{"id":9,"ts":1788352066819,"ev":"import.plan","ok":true,"uid":"3TR-nhgjg3tPyw4R","name":"Alberto","msg":"25 created, 0 updated, 8 custom"}`.
+
+### 7.5 Evidencia del lado servidor de que llegará bien a la vista Plan
+
+No puedo ver la interfaz renderizada, pero sí ejecutar **las mismas funciones puras que la app
+usa para dibujarla**. `effectiveRoutine()` de `frontend/src/lib/history.js` — la función que
+decide qué rutina toca cada día — sobre el estado realmente escrito:
+
+```
+2026-09-07 Lunes     → F1 · Full Body            2026-09-28 Lunes     → F1 · Full Body (descarga)
+2026-09-08 Martes    → F1 · Cardio moderado      2026-09-29 Martes    → F1 · Cardio moderado (descarga)
+2026-09-09 Miércoles → F1 · Full Body            2026-09-30 Miércoles → F1 · Full Body (descarga)
+2026-09-10 Jueves    → Postural diario           2026-10-02 Viernes   → F1 · Full Body (descarga)
+2026-09-11 Viernes   → F1 · Full Body            2026-10-03 Sábado    → F1 · Cardio moderado (descarga)
+2026-09-12 Sábado    → F1 · Cardio moderado
+2026-09-13 Domingo   → Postural diario
+```
+
+Las descargas de la semana 4 se resuelven solas por `dayPlan`. Y `F2 · Torso A`, leído con
+`modeOf()` / `isPerSide()` / `EXIDX` (lo mismo que usa el editor de rutinas):
+
+```
+ 1. barbell bench press                 4 × 8-10
+ 2. cable seated row                    4 × 8-10
+ 3. dumbbell seated shoulder press      3 × 8-10
+ 4. cable lat pulldown full range…      3 × 10-12
+ 5. lever seated fly                    3 × 10-12
+ 6. cable rear delt row (with rope)     3 × 15-20    note="postural"
+ 7. dumbbell biceps curl                3 × 10-12    [SUPERSERIE:sg1]
+ 8. cable pushdown                      3 × 10-12    [SUPERSERIE:sg1]
+ 9. lever seated crunch                 3 × 15-20
+10. Chin tucks                          3 × 10       note="postural · retracción de barbilla…"
+11. Estiramiento de pectoral…           3 × 0:30     note="postural · por lado"
+12. Wall angels                         3 × 10       note="postural"
+```
+
+Rangos rellenados, superserie enlazada en ejercicios contiguos, isométricos en **0:30** y no en
+repeticiones, bloque postural anexado con su nota.
+
+**Ajustes y datos no tocados**, comprobado sobre el fichero escrito: `lang: es`, `weekStart: 1`,
+`unit: kg`, `theme: dark`, y `workouts: 0`, `bodyweight: 0`, `exWeights: 0`.
+
+### 7.6 Checklist de la sesión anterior — cerrado
+
+| # | Punto | Estado |
+|---|---|---|
+| 1 | PR #1 mergeado y verificado | ✅ |
+| 2 | Passkey creada y verificada en servidor | ✅ **cerrado en esta sesión** |
+| 3 | Import real ejecutado | ✅ **cerrado en esta sesión** |
+| 3b | Verificado en la app desde el móvil | ⏳ **te toca a ti** — evidencia de servidor en §7.5, qué mirar en §7.7 |
+| 4 | `openapi.yaml` con el endpoint | ✅ |
+| 5 | `expected_ts` + `409` con test | ✅ |
+| 6 | `state_ts` documentado | ✅ |
+| 7 | Tests 43 → 48, todos verdes | ✅ |
+| 8 | `IMPORT_API.md` actualizado | ✅ |
+| 9 | `LLM_INTEGRATION.md` §5 + §6 | ✅ |
+| 10 | `mcp/` sin tocar | ✅ |
+| 11 | `sync-upstream.yml` activo | ✅ |
+
+### 7.7 Qué tienes que mirar tú en el móvil
+
+**Antes de nada: cierra la app del todo y vuelve a abrirla.** Si sigue abierta con el estado
+anterior a las 12:27 y tocas algo, su `pushState()` pisaría el import. Al reabrir en frío se
+queda con la copia del servidor (`_ts` del servidor es más nuevo). Comprobado a las 12:29: el
+estado en el servidor sigue intacto, nadie lo ha pisado.
+
+1. **Pestaña Plan** → 25 rutinas, empezando por `F1 · Full Body`, `F1 · Full Body (descarga)`,
+   `F1 · Cardio moderado`… hasta `Postural diario`.
+2. **Abre `F2 · Torso A`** → 12 ejercicios. *barbell bench press* debe decir **4 × 8-10**.
+   *dumbbell biceps curl* y *cable pushdown* deben salir **enlazados como superserie**. Los tres
+   últimos llevan la nota **postural**.
+3. **Vista de semana** → Lun/Mié/Vie `F1 · Full Body`, Mar/Sáb `F1 · Cardio moderado`,
+   Jue/Dom `Postural diario`.
+4. **`F1 · Full Body`, ejercicio 9 (*Plancha frontal*)** → debe mostrarse en **segundos (0:30)**,
+   no en repeticiones.
+5. **Los nombres de los ejercicios del catálogo saldrán en inglés** (*barbell bench press*), y
+   sólo los 8 propios en español. No es un fallo: el dataset es sólo inglés y openGym únicamente
+   tiene nombres traducidos a pt-BR y húngaro (`SCHEMA_NOTES.md` §12.4). El resto de la interfaz
+   y las instrucciones de ejercicio sí están en español.
