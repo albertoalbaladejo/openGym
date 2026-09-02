@@ -306,7 +306,10 @@ export function importPlan(state, payload, { uid }) {
       const dayName = String(day?.name || `Día ${di + 1}`).trim();
       const routineName = `${prefixOf(phaseName, pi)} · ${dayName}`;
       const ex = buildExerciseList(day?.exercises, ctx, summary);
-      if (appendPostural && posturalTagged.length && day?.append_postural !== false && !day?.is_cardio) {
+      // Every day the plan schedules, cardio included: "a daily postural routine" means daily,
+      // and a mobility block after 25 minutes on a bike is the day it is least likely to happen
+      // otherwise. A single day opts out with `append_postural: false`.
+      if (appendPostural && posturalTagged.length && day?.append_postural !== false) {
         ex.push(...posturalTagged.map(e => ({ ...e })));
       }
       const routine = { name: routineName, emoji: glyphFor(dayName), ex };

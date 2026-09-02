@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 6 — verificación de cobertura completa. Todo confirmado salvo dos huecos reales en el CARDIO y en el POSTURAL de los días de cardio (§8.2 y §8.3), pendientes de tu decisión.**
+Última actualización: **2026-09-02, sesión 6 — verificación completa + los dos huecos cerrados. El plan está entero en la app. Nada pendiente.**
 
 ---
 
@@ -684,3 +684,86 @@ Tres cosas a tener en cuenta:
 3. **Antes de que yo lance cualquier import, cierra la app.** El móvil y el import escriben el
    mismo fichero, y el que llega el último gana. El endpoint detecta el conflicto si le paso el
    `state_ts` correcto, pero lo más simple es no tenerla abierta.
+
+---
+
+## 10. Los dos huecos, cerrados (import correctivo)
+
+Ambos arreglados en una sola pasada, con `expected_ts` y triple copia de seguridad.
+**0 rutinas creadas, 25 actualizadas, 0 ejercicios nuevos** — la idempotencia hizo su trabajo.
+
+### 10.1 Postural en los días de cardio — arreglado
+
+Un cambio de una línea en `api/import-plan.js`: se quitó el filtro `!day?.is_cardio` que impedía
+anexar el bloque postural a las rutinas de cardio. La regla documentada en `docs/IMPORT_API.md`
+siempre dijo *"appended to the end of every training day's routine"*; el filtro era una
+particularidad no documentada. La vía de escape sigue existiendo por día (`append_postural: false`).
+
+Resultado, sobre el state real:
+
+```
+2026-09-07 Lunes     → F1 · Full Body        13 ej  postural ✔
+2026-09-08 Martes    → F1 · Cardio moderado   4 ej  postural ✔   ← antes 1 ej, sin postural
+2026-09-09 Miércoles → F1 · Full Body        13 ej  postural ✔
+2026-09-10 Jueves    → Postural diario        3 ej  postural ✔
+2026-09-11 Viernes   → F1 · Full Body        13 ej  postural ✔
+2026-09-12 Sábado    → F1 · Cardio moderado   4 ej  postural ✔   ← antes 1 ej, sin postural
+2026-09-13 Domingo   → Postural diario        3 ej  postural ✔
+```
+
+**7 de 7 días.** Las 24 rutinas de fase llevan los tres posturales; la 25 (`Postural diario`) es
+el bloque en sí.
+
+### 10.2 Días de cardio de Fase 2 y 3 — asignados
+
+| Fase | Días de fuerza | Cardio | Postural solo |
+|---|---|---|---|
+| 1 | Lun · Mié · Vie *Full Body* | **Mar · Sáb** *Cardio moderado* | Jue · Dom |
+| 2 | Lun *Torso A* · Mar *Pierna A* · Jue *Torso B* · Vie *Pierna B* | **Mié · Sáb** *Cardio intervalos* | Dom |
+| 3 | Lun · Jue *Push* · Mar · Vie *Pull* · **Mié** *Legs* | **Sáb** *HIIT corto* · **Dom** *Cardio suave* | — |
+
+Las tres fases quedan con los 7 días ocupados. Sólo hay que reasignar `week` al cambiar de fase
+(un import de 10 segundos con `active_phase`).
+
+**Dos decisiones que tomé yo, y conviene que las sepas:**
+
+1. **Fase 3, el sábado de pierna pasa a ser HIIT.** Tu plan original decía
+   `"Legs": ["Miércoles", "Sábado (opcional)"]` — opcional. La Fase 3 entrena 6 días de fuerza,
+   así que era el único hueco donde meter el cardio. `F3 · Legs` queda **sólo en miércoles**.
+2. **El segundo HIIT semanal de la Fase 3 no cabe.** 6 días de fuerza + 3 sesiones de cardio son
+   **9 sesiones en 7 días**. Está programado uno (sábado) y el cardio suave (domingo). El segundo
+   HIIT tendrás que hacerlo el día que te sobre energía, empezando `F3 · HIIT corto` a mano desde
+   la vista Plan — o encadenarlo después de un Push/Pull. No es un fallo del import: es que el
+   plan pide más sesiones de las que tiene una semana.
+
+### 10.3 Estado final verificado
+
+```
+_ts 1788353441680 | 25 rutinas | 8 customEx | 36 dayPlan | 0 workouts | lang: es
+```
+
+Copias antes de escribir: `state-…json.manual-20260902T124937Z`,
+`/home/ubuntu/state-alberto-pre-import2-20260902T124937Z.json`, y la automática
+`state-…json.bak-2026-09-02T12-50-41-680Z`.
+
+`dayPlan` pasa de 30 a **36 días de descarga**, porque las fases 2 y 3 ahora tienen días de cardio
+que también caen en semana de descarga.
+
+Tests: **48/48**. `mcp/` sin tocar.
+
+### 10.4 Checklist definitivo
+
+| Punto | Estado |
+|---|---|
+| 25 rutinas de fuerza | ✅ |
+| Cardio representado | ✅ 4 rutinas con modo, minutos y frecuencia |
+| Cardio programado en el calendario | ✅ **las 3 fases, 7/7 días** |
+| Postural en día de fuerza | ✅ |
+| Postural en día de descanso | ✅ |
+| Postural en día de cardio | ✅ **arreglado** |
+| Descargas: 6 semanas, fechas correctas | ✅ (36 días) |
+| Descargas: mismo peso, menos volumen | ✅ −33 a −41 % |
+| Pesos iniciales / descansos | ✅ 8/8 y 10/10 |
+| Superserie Torso A | ✅ |
+| Isométricos en segundos | ✅ |
+| Segundo HIIT de Fase 3 | ⚠️ no cabe en 7 días — §10.2, a mano |

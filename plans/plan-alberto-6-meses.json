@@ -8,154 +8,516 @@
   "phases": [
     {
       "name": "Fase 1 — Base",
-      "weeks": [1, 8],
+      "weeks": [
+        1,
+        8
+      ],
       "progression_default": "double_progression",
-      "deload_weeks": [4, 8],
+      "deload_weeks": [
+        4,
+        8
+      ],
       "deload_volume_reduction": 0.4,
       "days": [
         {
           "name": "Full Body",
-          "repeat_days": ["Lunes", "Miércoles", "Viernes"],
+          "repeat_days": [
+            "Lunes",
+            "Miércoles",
+            "Viernes"
+          ],
           "exercises": [
-            {"name": "Sentadilla en máquina Smith o prensa de piernas", "sets": 3, "reps": "12", "starting_weight_kg": "20-30", "rest_s": 90},
-            {"name": "Press de pecho en máquina", "sets": 3, "reps": "12", "starting_weight_kg": "10-15 por lado", "rest_s": 90},
-            {"name": "Remo sentado en máquina", "sets": 3, "reps": "12", "starting_weight_kg": "15-20", "rest_s": 90},
-            {"name": "Press militar en máquina", "sets": 3, "reps": "12", "starting_weight_kg": "8-12 por lado", "rest_s": 60},
-            {"name": "Jalón al pecho", "sets": 3, "reps": "12", "starting_weight_kg": "20-25", "rest_s": 60},
-            {"name": "Curl de bíceps en máquina", "sets": 3, "reps": "12", "starting_weight_kg": "6-8", "rest_s": 45},
-            {"name": "Extensión de tríceps en polea", "sets": 3, "reps": "12", "starting_weight_kg": "10-15", "rest_s": 45},
-            {"name": "Face pull", "sets": 3, "reps": "15-20", "starting_weight_kg": "5-9", "rest_s": 45, "tag": "postural"},
-            {"name": "Plancha frontal", "sets": 3, "timed_s": "30-45", "rest_s": 45, "progression": "time"},
-            {"name": "Crunch en máquina de abdominales", "sets": 3, "reps": "15", "rest_s": 45}
+            {
+              "name": "Sentadilla en máquina Smith o prensa de piernas",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "20-30",
+              "rest_s": 90
+            },
+            {
+              "name": "Press de pecho en máquina",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "10-15 por lado",
+              "rest_s": 90
+            },
+            {
+              "name": "Remo sentado en máquina",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "15-20",
+              "rest_s": 90
+            },
+            {
+              "name": "Press militar en máquina",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "8-12 por lado",
+              "rest_s": 60
+            },
+            {
+              "name": "Jalón al pecho",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "20-25",
+              "rest_s": 60
+            },
+            {
+              "name": "Curl de bíceps en máquina",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "6-8",
+              "rest_s": 45
+            },
+            {
+              "name": "Extensión de tríceps en polea",
+              "sets": 3,
+              "reps": "12",
+              "starting_weight_kg": "10-15",
+              "rest_s": 45
+            },
+            {
+              "name": "Face pull",
+              "sets": 3,
+              "reps": "15-20",
+              "starting_weight_kg": "5-9",
+              "rest_s": 45,
+              "tag": "postural"
+            },
+            {
+              "name": "Plancha frontal",
+              "sets": 3,
+              "timed_s": "30-45",
+              "rest_s": 45,
+              "progression": "time"
+            },
+            {
+              "name": "Crunch en máquina de abdominales",
+              "sets": 3,
+              "reps": "15",
+              "rest_s": 45
+            }
           ]
         }
       ],
       "cardio": [
-        {"name": "Cardio moderado", "days": ["Martes", "Sábado"], "type": "caminata rápida o bici", "duration_min": "25-30", "intensity": "moderada"}
+        {
+          "name": "Cardio moderado",
+          "days": [
+            "Martes",
+            "Sábado"
+          ],
+          "type": "caminata rápida o bici",
+          "duration_min": "25-30",
+          "intensity": "moderada"
+        }
       ]
     },
     {
       "name": "Fase 2 — Construcción",
-      "weeks": [9, 16],
+      "weeks": [
+        9,
+        16
+      ],
       "progression_default": "double_progression",
-      "deload_weeks": [12, 16],
+      "deload_weeks": [
+        12,
+        16
+      ],
       "deload_volume_reduction": 0.4,
       "days": [
         {
           "name": "Torso A",
-          "repeat_days": ["Lunes"],
+          "repeat_days": [
+            "Lunes"
+          ],
           "exercises": [
-            {"name": "Press de banca plano", "sets": 4, "reps": "10"},
-            {"name": "Remo en polea baja agarre en V", "sets": 4, "reps": "10"},
-            {"name": "Press de hombro con mancuernas", "sets": 3, "reps": "10"},
-            {"name": "Jalón al pecho agarre ancho", "sets": 3, "reps": "12"},
-            {"name": "Aperturas en máquina (pec deck)", "sets": 3, "reps": "12"},
-            {"name": "Face pull", "sets": 3, "reps": "15-20", "tag": "postural"},
-            {"name": "Curl de bíceps con mancuernas", "sets": 3, "reps": "12", "superset_with": "Extensión de tríceps en polea"},
-            {"name": "Extensión de tríceps en polea", "sets": 3, "reps": "12"},
-            {"name": "Abdominales en máquina", "sets": 3, "reps": "15-20"}
+            {
+              "name": "Press de banca plano",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Remo en polea baja agarre en V",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Press de hombro con mancuernas",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Jalón al pecho agarre ancho",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Aperturas en máquina (pec deck)",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Face pull",
+              "sets": 3,
+              "reps": "15-20",
+              "tag": "postural"
+            },
+            {
+              "name": "Curl de bíceps con mancuernas",
+              "sets": 3,
+              "reps": "12",
+              "superset_with": "Extensión de tríceps en polea"
+            },
+            {
+              "name": "Extensión de tríceps en polea",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Abdominales en máquina",
+              "sets": 3,
+              "reps": "15-20"
+            }
           ]
         },
         {
           "name": "Torso B",
-          "repeat_days": ["Jueves"],
+          "repeat_days": [
+            "Jueves"
+          ],
           "exercises": [
-            {"name": "Press inclinado con mancuernas", "sets": 4, "reps": "10"},
-            {"name": "Remo sentado agarre neutro", "sets": 4, "reps": "10"},
-            {"name": "Elevaciones laterales con mancuernas", "sets": 3, "reps": "15"},
-            {"name": "Contractor inverso (reverse pec deck)", "sets": 3, "reps": "15", "tag": "postural"},
-            {"name": "Fondos en máquina asistida", "sets": 3, "reps": "10"},
-            {"name": "Curl martillo con mancuernas", "sets": 3, "reps": "12"},
-            {"name": "Extensión de tríceps en máquina", "sets": 3, "reps": "12"},
-            {"name": "Plancha lateral", "sets": 3, "timed_s": "30-40", "note": "por lado", "progression": "time"}
+            {
+              "name": "Press inclinado con mancuernas",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Remo sentado agarre neutro",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Elevaciones laterales con mancuernas",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Contractor inverso (reverse pec deck)",
+              "sets": 3,
+              "reps": "15",
+              "tag": "postural"
+            },
+            {
+              "name": "Fondos en máquina asistida",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Curl martillo con mancuernas",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Extensión de tríceps en máquina",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Plancha lateral",
+              "sets": 3,
+              "timed_s": "30-40",
+              "note": "por lado",
+              "progression": "time"
+            }
           ]
         },
         {
           "name": "Pierna A",
-          "repeat_days": ["Martes"],
+          "repeat_days": [
+            "Martes"
+          ],
           "exercises": [
-            {"name": "Sentadilla en Smith o hack squat", "sets": 4, "reps": "10"},
-            {"name": "Prensa de piernas", "sets": 4, "reps": "12"},
-            {"name": "Curl femoral tumbado", "sets": 3, "reps": "12"},
-            {"name": "Extensión de cuádriceps", "sets": 3, "reps": "12"},
-            {"name": "Elevación de talones de pie (gemelos)", "sets": 4, "reps": "15"},
-            {"name": "Elevación de piernas colgado", "sets": 3, "reps": "12-15"}
+            {
+              "name": "Sentadilla en Smith o hack squat",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Prensa de piernas",
+              "sets": 4,
+              "reps": "12"
+            },
+            {
+              "name": "Curl femoral tumbado",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Extensión de cuádriceps",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Elevación de talones de pie (gemelos)",
+              "sets": 4,
+              "reps": "15"
+            },
+            {
+              "name": "Elevación de piernas colgado",
+              "sets": 3,
+              "reps": "12-15"
+            }
           ]
         },
         {
           "name": "Pierna B",
-          "repeat_days": ["Viernes"],
+          "repeat_days": [
+            "Viernes"
+          ],
           "exercises": [
-            {"name": "Peso muerto rumano", "sets": 4, "reps": "10"},
-            {"name": "Zancadas con mancuernas", "sets": 3, "reps": "12", "note": "por pierna"},
-            {"name": "Máquina de abductores", "sets": 3, "reps": "15"},
-            {"name": "Máquina de aductores", "sets": 3, "reps": "15"},
-            {"name": "Curl femoral sentado", "sets": 3, "reps": "12"},
-            {"name": "Elevación de talones sentado (gemelos)", "sets": 4, "reps": "15"},
-            {"name": "Rueda abdominal (ab wheel)", "sets": 3, "reps": "12-15"}
+            {
+              "name": "Peso muerto rumano",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Zancadas con mancuernas",
+              "sets": 3,
+              "reps": "12",
+              "note": "por pierna"
+            },
+            {
+              "name": "Máquina de abductores",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Máquina de aductores",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Curl femoral sentado",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Elevación de talones sentado (gemelos)",
+              "sets": 4,
+              "reps": "15"
+            },
+            {
+              "name": "Rueda abdominal (ab wheel)",
+              "sets": 3,
+              "reps": "12-15"
+            }
           ]
         }
       ],
       "cardio": [
-        {"name": "Cardio intervalos", "days": [], "type": "intervalos moderados cinta o bici", "duration_min": "20", "frequency": "2-3x/semana"}
+        {
+          "name": "Cardio intervalos",
+          "days": [
+            "Miércoles",
+            "Sábado"
+          ],
+          "type": "intervalos moderados cinta o bici",
+          "duration_min": "20",
+          "frequency": "2-3x/semana"
+        }
       ]
     },
     {
       "name": "Fase 3 — Definición",
-      "weeks": [17, 24],
+      "weeks": [
+        17,
+        24
+      ],
       "progression_default": "double_progression",
-      "deload_weeks": [20, 24],
+      "deload_weeks": [
+        20,
+        24
+      ],
       "deload_volume_reduction": 0.4,
       "days": [
         {
           "name": "Push",
-          "repeat_days": ["Lunes", "Jueves"],
+          "repeat_days": [
+            "Lunes",
+            "Jueves"
+          ],
           "exercises": [
-            {"name": "Press de banca plano", "sets": 4, "reps": "8-10"},
-            {"name": "Press inclinado con mancuernas", "sets": 3, "reps": "10"},
-            {"name": "Press militar en máquina", "sets": 3, "reps": "10"},
-            {"name": "Elevaciones laterales con mancuernas", "sets": 3, "reps": "15"},
-            {"name": "Fondos en máquina asistida", "sets": 3, "reps": "10"},
-            {"name": "Extensión de tríceps en polea", "sets": 3, "reps": "12"},
-            {"name": "Crunch en polea alta", "sets": 4, "reps": "15-20"}
+            {
+              "name": "Press de banca plano",
+              "sets": 4,
+              "reps": "8-10"
+            },
+            {
+              "name": "Press inclinado con mancuernas",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Press militar en máquina",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Elevaciones laterales con mancuernas",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Fondos en máquina asistida",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Extensión de tríceps en polea",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Crunch en polea alta",
+              "sets": 4,
+              "reps": "15-20"
+            }
           ]
         },
         {
           "name": "Pull",
-          "repeat_days": ["Martes", "Viernes"],
+          "repeat_days": [
+            "Martes",
+            "Viernes"
+          ],
           "exercises": [
-            {"name": "Dominadas asistidas o jalón al pecho", "sets": 4, "reps": "8-10"},
-            {"name": "Remo sentado", "sets": 4, "reps": "10"},
-            {"name": "Remo en polea baja agarre ancho", "sets": 3, "reps": "12"},
-            {"name": "Face pull", "sets": 3, "reps": "15-20", "tag": "postural"},
-            {"name": "Contractor inverso", "sets": 3, "reps": "15", "tag": "postural"},
-            {"name": "Curl de bíceps en máquina", "sets": 3, "reps": "12"},
-            {"name": "Curl martillo con mancuernas", "sets": 3, "reps": "12"}
+            {
+              "name": "Dominadas asistidas o jalón al pecho",
+              "sets": 4,
+              "reps": "8-10"
+            },
+            {
+              "name": "Remo sentado",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Remo en polea baja agarre ancho",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Face pull",
+              "sets": 3,
+              "reps": "15-20",
+              "tag": "postural"
+            },
+            {
+              "name": "Contractor inverso",
+              "sets": 3,
+              "reps": "15",
+              "tag": "postural"
+            },
+            {
+              "name": "Curl de bíceps en máquina",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Curl martillo con mancuernas",
+              "sets": 3,
+              "reps": "12"
+            }
           ]
         },
         {
           "name": "Legs",
-          "repeat_days": ["Miércoles", "Sábado"],
+          "repeat_days": [
+            "Miércoles"
+          ],
           "exercises": [
-            {"name": "Sentadilla en Smith o hack squat", "sets": 4, "reps": "8-10"},
-            {"name": "Prensa de piernas", "sets": 4, "reps": "10"},
-            {"name": "Peso muerto rumano", "sets": 3, "reps": "10"},
-            {"name": "Curl femoral", "sets": 3, "reps": "12"},
-            {"name": "Extensión de cuádriceps", "sets": 3, "reps": "12"},
-            {"name": "Elevación de talones (gemelos)", "sets": 4, "reps": "15"},
-            {"name": "Elevación de piernas colgado", "sets": 4, "reps": "12-15"}
+            {
+              "name": "Sentadilla en Smith o hack squat",
+              "sets": 4,
+              "reps": "8-10"
+            },
+            {
+              "name": "Prensa de piernas",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Peso muerto rumano",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Curl femoral",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Extensión de cuádriceps",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
+              "name": "Elevación de talones (gemelos)",
+              "sets": 4,
+              "reps": "15"
+            },
+            {
+              "name": "Elevación de piernas colgado",
+              "sets": 4,
+              "reps": "12-15"
+            }
           ]
         }
       ],
       "cardio": [
-        {"name": "HIIT corto", "days": [], "type": "HIIT corto", "duration_min": "15-20", "frequency": "2x/semana", "pattern": "30s fuerte / 90s suave"},
-        {"name": "Cardio suave", "days": [], "type": "cardio suave", "duration_min": "30", "frequency": "1x/semana"}
+        {
+          "name": "HIIT corto",
+          "days": [
+            "Sábado"
+          ],
+          "type": "HIIT corto",
+          "duration_min": "15-20",
+          "frequency": "2x/semana",
+          "pattern": "30s fuerte / 90s suave"
+        },
+        {
+          "name": "Cardio suave",
+          "days": [
+            "Domingo"
+          ],
+          "type": "cardio suave",
+          "duration_min": "30",
+          "frequency": "1x/semana"
+        }
       ]
     }
   ],
   "daily_postural_routine": [
-    {"name": "Chin tucks", "sets": 3, "reps": "10", "note": "retracción de barbilla, aguantar 5s", "progression": "off"},
-    {"name": "Estiramiento de pectoral en marco de puerta", "sets": 3, "timed_s": "30-45", "note": "por lado", "progression": "off"},
-    {"name": "Wall angels", "sets": 3, "reps": "10", "progression": "off"}
+    {
+      "name": "Chin tucks",
+      "sets": 3,
+      "reps": "10",
+      "note": "retracción de barbilla, aguantar 5s",
+      "progression": "off"
+    },
+    {
+      "name": "Estiramiento de pectoral en marco de puerta",
+      "sets": 3,
+      "timed_s": "30-45",
+      "note": "por lado",
+      "progression": "off"
+    },
+    {
+      "name": "Wall angels",
+      "sets": 3,
+      "reps": "10",
+      "progression": "off"
+    }
   ]
 }
