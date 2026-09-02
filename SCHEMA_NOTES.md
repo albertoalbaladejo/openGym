@@ -731,3 +731,29 @@ cambia ni un píxel**.
 
 Recomendación: hacer el diagnóstico de §13.3 primero. Los arreglos 1 y 2 tratan causas
 distintas y sólo uno de los dos es el tuyo.
+
+### 13.5 Lo aplicado
+
+Arreglo 1 de §13.4, en `frontend/vite.config.js`:
+
+```js
+build: { chunkSizeWarningLimit: 1500, cssTarget: ['chrome87', 'safari14', 'firefox78', 'edge88'] }
+```
+
+Verificado sobre el bundle realmente servido, después de `docker compose up -d --build web`:
+
+```
+                          antes (index-DHhuqVQx.css)   después (index-C6uqe8bm.css)
+@media (width<=400px)     sí                            —
+@media (width>=1000px)    sí                            —
+@media (max-width:400px)  —                             sí
+@media (min-width:1000px) —                             sí
+```
+
+Las reglas son las mismas (`max-width:1080px` sigue ahí); sólo cambia la sintaxis con que se
+emiten. En un navegador moderno no cambia nada; en uno anterior a Safari 16.4 / Chrome 104, el
+bloque de escritorio deja de descartarse.
+
+**Sigue pendiente el diagnóstico de §13.3.** Si con el bundle nuevo `#app` sigue midiendo 640 px
+con la ventana maximizada, la causa era la de §13.2 (`.narrow`, decisión de diseño de upstream) y
+el arreglo es el 2, no el 1.

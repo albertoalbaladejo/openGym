@@ -48,9 +48,10 @@ tarball, y en los dos repos donde ya estaba.
       están abajo; la verificación en servidor la hago yo después.
 - [x] **§3 i18n** — investigado, `SCHEMA_NOTES.md` §12. **Resultado: no hay nada que
       implementar**, el español ya está al 100 % (719 claves) y desplegado. Es un ajuste.
-- [x] **§4 Responsive** — investigado, `SCHEMA_NOTES.md` §13. Hay diseño de escritorio y se
-      está sirviendo; falta un diagnóstico de 10 segundos en tu navegador para saber cuál de
-      las dos causas es. **Nada implementado, esperando tu confirmación de alcance.**
+- [x] **§4 Responsive** — investigado (`SCHEMA_NOTES.md` §13) y **aplicado el arreglo de build**
+      (§13.5): `cssTarget` en `vite.config.js`, contenedor `web` reconstruido, verificado que el
+      bundle emite `@media (min-width:1000px)` en vez de `(width>=1000px)`. **Falta tu medida
+      del ancho de `#app`** para saber si con eso basta o hace falta además subir `.narrow`.
 
 ## 3. Hechos de infraestructura que no están en el repo
 
@@ -77,8 +78,9 @@ Después de eso: **Ajustes → Idioma → Español**, y ya puedo lanzar el impor
 
 ### §3 y §4 — decisiones de alcance pendientes
 
-* **i18n:** ¿quieres sólo el cambio de ajuste (cero código), o además autodetección de
-  `navigator.language`, o además traducir los 1324 nombres de ejercicio?
-* **Responsive:** hace falta el ancho calculado de `#app` en tu navegador maximizado
-  (DevTools → Elements → `#app`) para saber si el arreglo es de build (`cssTarget`) o de
-  diseño (`.narrow` a 820px).
+* **i18n:** decidido — nada que implementar. Ajustes → Idioma → Español.
+* **Responsive:** aplicado el `cssTarget`. Con la ventana maximizada y **recargando con
+  Ctrl+Shift+R** (el bundle cambió de nombre: `index-C6uqe8bm.css`), dime el ancho calculado de
+  `#app` en DevTools → Elements. **640 px** ⇒ era diseño de upstream y toca subir `.narrow` a
+  820 px; **1080 px** en Plan/Stats y 640 en el resto ⇒ funcionando como upstream lo diseñó;
+  **560 px** ⇒ algo más lo está tapando y hay que seguir mirando.
