@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 6 — verificación completa + los dos huecos cerrados. El plan está entero en la app. Nada pendiente.**
+Última actualización: **2026-09-02, sesión 7 — plan rediseñado a 3 días/semana (Lun-Mié-Vie). PROYECTO CERRADO.**
 
 ---
 
@@ -767,3 +767,132 @@ Tests: **48/48**. `mcp/` sin tocar.
 | Superserie Torso A | ✅ |
 | Isométricos en segundos | ✅ |
 | Segundo HIIT de Fase 3 | ⚠️ no cabe en 7 días — §10.2, a mano |
+
+---
+
+## 11. Sesión 7 — rediseño a 3 días/semana
+
+Motivo: sólo hay gimnasio **Lunes, Miércoles y Viernes**, nunca fin de semana.
+
+### 11.1 El calendario nuevo, verificado con `effectiveRoutine()` sobre el state escrito
+
+| Fase | **Lun** | Mar | **Mié** | Jue | **Vie** | Sáb | Dom |
+|---|---|---|---|---|---|---|---|
+| **1** (1-8) | Full Body 13 ej | Cardio moderado | Full Body 13 ej | Cardio moderado | Full Body 13 ej | Postural | Postural |
+| **2** (9-16) | Full Body A 12 ej | Cardio intervalos | Full Body B 12 ej | Cardio intervalos | Full Body C 13 ej | Postural | Postural |
+| **3** (17-24) | Push 10 ej | HIIT corto | Pull 10 ej | HIIT corto | Legs 10 ej | Cardio suave | Postural |
+
+**Los 7 días de las 3 fases llevan el bloque postural.** Ninguna sesión de fuerza cae en fin de
+semana. El cardio va en Mar/Jue (no necesita máquinas); el único de fin de semana es el
+`F3 · Cardio suave` del sábado, que son 30 min caminando al aire libre.
+
+**Novedad buena: ahora cabe todo el cardio de la Fase 3.** Con el diseño de 6 días de fuerza, el
+segundo HIIT semanal no tenía hueco. A 3 días de gimnasio entran los dos HIIT (Mar/Jue) **y** el
+cardio suave (Sáb).
+
+**Lo único que no cabe:** la Fase 2 pedía intervalos *"2-3×/semana"*; están programados **2**
+(Mar/Jue). El tercero, opcional, necesitaría sábado con bici propia o cinta — no se programa; se
+puede empezar `F2 · Cardio intervalos` a mano desde la vista Plan cualquier día.
+
+### 11.2 Fase 2: de 4 días a 3 (Opción A, confirmada)
+
+`F2 · Torso A/B` + `F2 · Pierna A/B` → **`F2 · Full Body A / B / C`**. Cada sesión toca tren
+superior e inferior con énfasis distinto:
+
+```
+Lun  Full Body A   Sentadilla Smith 4×8-10 · Press banca 4×8-10 · Remo polea V 4×8-10
+                   Extensión cuádriceps · Press hombro mancuernas · Face pull (postural)
+                   Curl bíceps ⟷ Extensión tríceps (superserie) · Abdominales
+Mié  Full Body B   Peso muerto rumano · Jalón ancho · Press inclinado · Curl femoral tumbado
+                   Elevaciones laterales · Contractor inverso (postural) · Curl martillo
+                   Gemelos de pie · Elevación piernas colgado
+Vie  Full Body C   Prensa · Remo sentado neutro · Aperturas máquina · Zancadas · Fondos asistidos
+                   Curl femoral sentado · Abductores · Aductores · Gemelos sentado · Plancha lateral
+```
+
+Frecuencia semanal: pecho y espalda **3×**, piernas / hombro / brazos / gemelos / core **2×**.
+
+**Qué se recortó, con nombre y apellido:** de los 30 ejercicios de fuerza que tenía la Fase 2
+quedan **28**. Caen *Extensión de tríceps en máquina* (duplicado de la de polea, que sí está) y
+*Rueda abdominal* (quedan tres ejercicios de core: abdominales en máquina, elevación de piernas
+colgado y plancha lateral).
+
+Detalle a saber: *Remo en polea baja agarre en V* (Lun) y *Remo sentado agarre neutro* (Vie)
+resuelven al mismo ejercicio del catálogo (`cable seated row`), así que aparece dos veces en la
+semana. Es el mismo movimiento, deliberado para dar frecuencia a la espalda.
+
+### 11.3 `prune_phase_routines` — el borrado de rutinas obsoletas
+
+Fusionar días cambia los **nombres**, y el upsert por nombre no puede saber que `F2 · Torso A`
+fue sustituida por `F2 · Full Body A`: sólo ve que una ya no se produce. Sin borrado explícito,
+cada rediseño deja sedimento (habrían quedado 31 rutinas, 8 de ellas basura).
+
+Flag nuevo, **opt-in**, en `api/import-plan.js`. Borra sólo rutinas que (a) llevan un prefijo de
+fase que **este payload** genera y (b) **este import no ha escrito**. Una rutina tuya propia no
+lleva prefijo, así que no puede coincidir nunca. Limpia además las referencias colgando en `week`
+y `dayPlan`, y las fechas de descarga que el plan ya no programa. Documentado en
+`docs/IMPORT_API.md` §6.1 y en `api/openapi.yaml`. **6 tests nuevos** (incluido "nunca toca una
+rutina del usuario" y "sigue siendo idempotente").
+
+### 11.4 El import corrector
+
+```
+✓ imported  ·  profile 3TR-nhgjg3tPyw4R
+  backup      state-3TR-nhgjg3tPyw4R.json.bak-2026-09-02T13-03-58-356Z
+  state_ts    1788354238356
+  routines    6 created, 17 updated, 8 removed
+  exercises   58 matched, 0 created as custom, 8 custom reused, 0 unresolved
+  calendar    32 day overrides written, 6 stale removed
+```
+
+Eliminadas: `F2 · Torso A`, `F2 · Torso B`, `F2 · Pierna A`, `F2 · Pierna B` y sus 4 gemelas de
+descarga. **25 → 23 rutinas.** El dry-run previo coincidió exactamente con la simulación offline.
+
+Copias antes de escribir: `data/state-…manual-20260902T125744Z`,
+`/home/ubuntu/state-alberto-pre-redesign-20260902T125744Z.json`, y la automática del endpoint.
+
+Verificado en el state escrito, no en el resumen: `_ts 1788354238356`, **23 rutinas**, 8 `customEx`,
+**32 `dayPlan`**, 0 workouts, `lang: es`. **0 referencias colgando** en `week` y en `dayPlan`.
+Cero rutinas `Torso`/`Pierna` restantes.
+
+### 11.5 Documentación estructural
+
+* `docs/IMPORT_API.md` §6.1 — `prune_phase_routines`, y `routines.removed` en el resumen.
+* `api/openapi.yaml` — el flag y los dos campos nuevos del resumen. Sigue validando limpio
+  (`redocly lint`: *"Your API description is valid"*, 6 warnings, ninguna en la ruta de import).
+* `SCHEMA_NOTES.md` §14 — **el límite de esquema que forzó la fusión**: `S.week` es un mapa día de
+  la semana → rutina, sin noción de número de semana, así que **una rotación A/B entre semanas no
+  es representable**. Un split de 4 días necesita 4 días distintos; con 3, hay que fusionar de
+  verdad, no rotar. Es la razón por la que la Opción A era la única sensata.
+
+### 11.6 Checklist de cierre
+
+| Punto | Estado |
+|---|---|
+| Plan rediseñado a 3 días Lun-Mié-Vie, confirmado antes de escribir | ✅ |
+| Import corrector idempotente, verificado en el state real | ✅ 6 creadas / 17 actualizadas / 8 borradas, 23 rutinas |
+| Cardio en días sin gimnasio, con aviso de lo que no cabe | ✅ Mar/Jue + Sáb al aire libre; el 3.º de Fase 2 avisado |
+| Postural diario en los 7 días de las 3 fases | ✅ verificado con `effectiveRoutine()` |
+| `docs/IMPORT_API.md` y `SCHEMA_NOTES.md` actualizados | ✅ §6.1 y §14 |
+| `api/openapi.yaml` sigue siendo espejo de `server.js` | ✅ valida limpio |
+| Tests | ✅ **48 → 54**, todos verdes |
+| `LLM_INTEGRATION.md` §6 (lock, 423, max_custom_exercises) | ✅ **sigue como decisión de producto diferida**, no como olvido |
+| `mcp/` sin tocar | ✅ |
+| `sync-upstream.yml` activo | ✅ |
+
+### 11.7 ¿Cambia algo de cómo se usa la app?
+
+**No. Sólo ha cambiado el calendario, no la mecánica.** Todo lo de §9 sigue igual:
+
+* **Hoy** se sigue mirando en la pestaña Home, con la tira de la semana y la fila *Hoy* con su
+  botón **Empezar**. Lo único distinto es lo que dice: ahora sábado y domingo son
+  `Postural diario` (o `F3 · Cardio suave` el sábado en Fase 3), nunca gimnasio.
+* **Registrar una sesión** es idéntico, y la doble progresión funciona igual: techo del rango en
+  todas las series → sube el peso; tres sesiones cortas seguidas → baja un 10 %.
+* **Las semanas de descarga** siguen sin avisarte: lo único que ves es el `(descarga)` en el
+  nombre. Ahora son **32 días** en vez de 36, porque hay menos días de entreno por semana.
+* **Tocar cosas a mano** sigue siendo seguro por la misma razón: la progresión se recalcula desde
+  el historial, no hay contadores guardados.
+* **Un aviso nuevo:** ahora existe `prune_phase_routines`. Si en el futuro te renombro o fusiono
+  rutinas, las viejas se borran. Por eso sigue en pie lo de **no renombrar tú las rutinas** si
+  quieres poder reimportar: el emparejamiento es por nombre.

@@ -75,7 +75,7 @@ test('the plan lands as routines, a week and a set of custom exercises', () => {
 test('a timed hold carries mode:"time" — without it 45 seconds becomes 45 reps', () => {
   const s = emptyState();
   importPlan(s, PLAN, { uid: minter() });
-  const plank = s.routines.find(r => r.name === 'F2 · Torso B').ex.find(e => e.mode === 'time');
+  const plank = s.routines.find(r => r.name === 'F2 · Full Body C').ex.find(e => e.mode === 'time');
   assert.ok(plank, 'the side plank is written as a timed exercise');
   assert.equal(plank.sec, 30);
   assert.equal(plank.reps, undefined);
@@ -85,7 +85,7 @@ test('a timed hold carries mode:"time" — without it 45 seconds becomes 45 reps
 test('a superset is a shared sg on two adjacent exercises', () => {
   const s = emptyState();
   importPlan(s, PLAN, { uid: minter() });
-  const ex = s.routines.find(r => r.name === 'F2 · Torso A').ex;
+  const ex = s.routines.find(r => r.name === 'F2 · Full Body A').ex;
   const grouped = ex.map((e, i) => [e, i]).filter(([e]) => e.sg);
   assert.equal(grouped.length, 2, 'exactly one pair is grouped');
   assert.equal(grouped[0][0].sg, grouped[1][0].sg, 'the pair shares one group id');
@@ -104,8 +104,8 @@ test('the postural block rides on every training day and owns the rest days', ()
 test('deload routines cut volume, keep the weight, and opt out of progression', () => {
   const s = emptyState();
   importPlan(s, PLAN, { uid: minter() });
-  const normal = s.routines.find(r => r.name === 'F2 · Torso A');
-  const deload = s.routines.find(r => r.name === 'F2 · Torso A (descarga)');
+  const normal = s.routines.find(r => r.name === 'F2 · Full Body A');
+  const deload = s.routines.find(r => r.name === 'F2 · Full Body A (descarga)');
   assert.ok(deload);
   assert.equal(deload.excludeFromProgression, true);
   normal.ex.forEach((e, i) => {
@@ -196,4 +196,95 @@ test('a routine the user made themselves is left alone', () => {
 test('a payload with no phases and no postural routine is a 400, not an empty import', () => {
   assert.throws(() => importPlan(emptyState(), {}, { uid: minter() }), /no phases/);
   assert.throws(() => importPlan(emptyState(), { ...PLAN, start_date: 'ayer' }, { uid: minter() }), /ISO date/);
+});
+
+/* ---------- prune_phase_routines ---------- */
+
+test('without the flag, a plan that drops a day leaves the old routine behind', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const before = s.routines.length;
+
+  const shrunk = structuredClone(PLAN);
+  shrunk.prune_phase_routines = false;                         // the plan file ships it on
+  shrunk.phases[1].days = shrunk.phases[1].days.slice(0, 1);   // one day instead of three
+  const r = importPlan(s, shrunk, { uid });
+
+  assert.equal(r.routines.removed.length, 0, 'nothing is deleted unless asked');
+  assert.equal(s.routines.length, before, 'the dropped days are still there, just unscheduled');
+});
+
+test('with the flag, the routines this plan no longer produces are removed', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const namesBefore = s.routines.map(r => r.name);
+
+  const shrunk = structuredClone(PLAN);
+  shrunk.prune_phase_routines = true;
+  const dropped = shrunk.phases[1].days.slice(1).map(d => d.name);
+  shrunk.phases[1].days = shrunk.phases[1].days.slice(0, 1);
+  const r = importPlan(s, shrunk, { uid });
+
+  assert.ok(r.routines.removed.length > 0);
+  dropped.forEach(name => {
+    assert.ok(namesBefore.some(n => n.endsWith('· ' + name)), 'it existed before');
+    assert.ok(!s.routines.some(x => x.name.endsWith('· ' + name)), `${name} was removed`);
+    assert.ok(!s.routines.some(x => x.name.endsWith('· ' + name + ' (descarga)')), `${name}'s deload twin went too`);
+  });
+});
+
+test('pruning never touches a routine the user wrote themselves', () => {
+  const s = emptyState();
+  const uid = minter();
+  s.routines.push({ id: 'mine', name: 'Mi rutina', ex: [{ id: '0025', sets: 3, reps: 5 }] });
+  importPlan(s, { ...PLAN, prune_phase_routines: true }, { uid });
+  importPlan(s, { ...PLAN, prune_phase_routines: true }, { uid });
+  const mine = s.routines.find(r => r.id === 'mine');
+  assert.ok(mine, 'a routine with no phase prefix can never match the prune');
+  assert.deepEqual(mine.ex, [{ id: '0025', sets: 3, reps: 5 }]);
+});
+
+test('pruning clears the week slots and day overrides left dangling', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+
+  const shrunk = structuredClone(PLAN);
+  shrunk.prune_phase_routines = true;
+  shrunk.phases[1].days = shrunk.phases[1].days.slice(0, 1);
+  importPlan(s, shrunk, { uid });
+
+  const live = new Set(s.routines.map(r => r.id));
+  Object.values(s.week).forEach(id => assert.ok(live.has(id), 'no week slot points at a deleted routine'));
+  Object.values(s.dayPlan).forEach(id => assert.ok(live.has(id), 'no day override points at a deleted routine'));
+});
+
+test('pruning drops the deload dates the plan no longer schedules', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const before = Object.keys(s.dayPlan).length;
+
+  // The same plan trained on fewer weekdays: the dates it used to override must not linger.
+  const fewer = structuredClone(PLAN);
+  fewer.prune_phase_routines = true;
+  fewer.phases[0].days[0].repeat_days = ['Lunes'];
+  importPlan(s, fewer, { uid });
+
+  assert.ok(Object.keys(s.dayPlan).length < before, 'the abandoned dates are gone');
+  const live = new Set(s.routines.map(r => r.id));
+  Object.values(s.dayPlan).forEach(id => assert.ok(live.has(id)));
+});
+
+test('pruning stays idempotent — a second identical import removes nothing', () => {
+  const s = emptyState();
+  const uid = minter();
+  const p = { ...PLAN, prune_phase_routines: true };
+  importPlan(s, p, { uid });
+  const after = bare(s);
+  const second = importPlan(s, p, { uid });
+  assert.equal(second.routines.removed.length, 0);
+  assert.deepEqual(bare(s), after, 'the state is byte-identical the second time');
 });

@@ -140,6 +140,7 @@ curl -sS -X POST https://gym.example.com/api/admin/import-plan \
   "active_phase": "Fase 1 — Base",       // which phase fills the weekly schedule
   "emit_deload_routines": true,          // default true
   "deload_suffix": " (descarga)",        // default " (descarga)"
+  "prune_phase_routines": false,         // default false — see §6.1
   "append_postural_to_training_days": true,   // default true
   "schedule_postural_on_rest_days": true,     // default true
   "postural_routine_name": "Postural diario",
@@ -289,7 +290,7 @@ The response tells you which route each exercise took (`via`): `explicit-id`, `c
     "exercises_matched": 60, "exercises_custom_created": 8, "exercises_custom_reused": 0,
     "exercises_unresolved": 0, "day_overrides": 30
   },
-  "routines": { "created": ["F1 · Full Body", …], "updated": [] },
+  "routines": { "created": ["F1 · Full Body", …], "updated": [], "removed": [] },
   "exercises": {
     "matched":        [{ "name": "Press de banca plano", "id": "0025", "via": "catalogue-es" }],
     "custom_created": [{ "name": "Chin tucks", "id": "mf9x1a2b3", "body_part": "neck" }],
@@ -307,6 +308,29 @@ The response tells you which route each exercise took (`via`): `explicit-id`, `c
 ## 6. What it writes, and what it never touches
 
 Written: `routines`, `week`, `dayPlan`, `customEx`, `_ts` — inside `state-<uid>.json` only.
+
+### 6.1 `prune_phase_routines` — removing what the plan no longer has
+
+**Off by default.** With it on, the import also **deletes** the routines that carry a phase
+prefix this payload produces (`F2 · …`) and that this import did not just write — the ones a
+previous shape of the same plan left behind when a training day is dropped or renamed.
+
+It is scoped as narrowly as deletion can be:
+
+* only routines whose name starts with a prefix **this payload generates**, so a routine you
+  wrote yourself can never match — it has no prefix;
+* only those **this import did not produce**;
+* only when asked for explicitly.
+
+It also clears what would otherwise dangle: `week` slots and `dayPlan` dates pointing at a
+removed routine, plus deload dates that still point at a routine this plan manages but that the
+plan no longer schedules — a plan that used to train on Saturdays leaves Saturday overrides
+behind when it stops. Both would render as a rest day, which reads as a bug rather than as the
+deliberate removal it is.
+
+The response reports `routines.removed` (names) and `day_overrides_removed` (a count). The
+automatic backup is taken exactly as on any other import, so a prune is one `mv` away from being
+undone.
 
 Never touched:
 

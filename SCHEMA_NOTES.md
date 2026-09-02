@@ -757,3 +757,39 @@ bloque de escritorio deja de descartarse.
 **Sigue pendiente el diagnóstico de §13.3.** Si con el bundle nuevo `#app` sigue midiendo 640 px
 con la ventana maximizada, la causa era la de §13.2 (`.narrow`, decisión de diseño de upstream) y
 el arreglo es el 2, no el 1.
+
+---
+
+## 14. Un límite del esquema que sólo aparece al reducir días (2026-09-02)
+
+Al bajar el plan a 3 sesiones semanales hubo que fusionar el split de 4 días de la Fase 2
+(Torso A/B + Pierna A/B) en 3. La alternativa natural en papel — rotar los 4 días sobre 3
+sesiones, de forma que la semana 1 sea A/B/C y la semana 2 D/A/B — **no es representable en
+openGym**, y conviene tenerlo escrito porque no es obvio:
+
+```js
+// history.js
+export function effectiveRoutineId(S, iso) {
+  const ov = S.dayPlan[iso]
+  if (ov === 'rest') return null
+  if (ov && S.routines.some(r => r.id === ov)) return ov
+  const wd = new Date(iso + 'T12:00:00').getDay()
+  return S.week[wd] || null          // ← un día de la semana, una rutina, siempre
+}
+```
+
+`S.week` es un mapa **día de la semana → rutina**, sin noción de número de semana. La única forma
+de que un lunes concreto tenga otra cosa es una entrada explícita en `S.dayPlan` para **esa fecha
+exacta**. Una rotación A/B sobre 24 semanas se podría *simular* escribiendo ~72 entradas de
+`dayPlan` a mano, pero entonces el plan deja de vivir en `week` (lo que la app enseña como "tu
+semana") y pasa a ser una lista de fechas: la vista Plan mostraría una semana que no es la que
+realmente se entrena. Se descartó por eso, no por esfuerzo.
+
+Consecuencia práctica para cualquier plan que se importe aquí: **el split tiene que caber en 7
+días fijos**. Un 4-day split necesita 4 días distintos de la semana; si sólo hay 3, hay que
+fusionar de verdad, no rotar.
+
+Esto también explica `prune_phase_routines` (§ `docs/IMPORT_API.md` 6.1): fusionar días cambia
+los **nombres** de las rutinas, y el upsert por nombre no puede saber que `F2 · Torso A` fue
+sustituida por `F2 · Full Body A` — sólo ve que una ya no se produce. Sin un borrado explícito,
+cada rediseño del plan deja sedimento en la vista Plan.

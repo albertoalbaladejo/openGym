@@ -105,7 +105,7 @@
           "name": "Cardio moderado",
           "days": [
             "Martes",
-            "Sábado"
+            "Jueves"
           ],
           "type": "caminata rápida o bici",
           "duration_min": "25-30",
@@ -127,11 +127,16 @@
       "deload_volume_reduction": 0.4,
       "days": [
         {
-          "name": "Torso A",
+          "name": "Full Body A",
           "repeat_days": [
             "Lunes"
           ],
           "exercises": [
+            {
+              "name": "Sentadilla en Smith o hack squat",
+              "sets": 4,
+              "reps": "10"
+            },
             {
               "name": "Press de banca plano",
               "sets": 4,
@@ -143,19 +148,14 @@
               "reps": "10"
             },
             {
+              "name": "Extensión de cuádriceps",
+              "sets": 3,
+              "reps": "12"
+            },
+            {
               "name": "Press de hombro con mancuernas",
               "sets": 3,
               "reps": "10"
-            },
-            {
-              "name": "Jalón al pecho agarre ancho",
-              "sets": 3,
-              "reps": "12"
-            },
-            {
-              "name": "Aperturas en máquina (pec deck)",
-              "sets": 3,
-              "reps": "12"
             },
             {
               "name": "Face pull",
@@ -182,71 +182,25 @@
           ]
         },
         {
-          "name": "Torso B",
+          "name": "Full Body B",
           "repeat_days": [
-            "Jueves"
+            "Miércoles"
           ],
           "exercises": [
+            {
+              "name": "Peso muerto rumano",
+              "sets": 4,
+              "reps": "10"
+            },
+            {
+              "name": "Jalón al pecho agarre ancho",
+              "sets": 4,
+              "reps": "10"
+            },
             {
               "name": "Press inclinado con mancuernas",
-              "sets": 4,
-              "reps": "10"
-            },
-            {
-              "name": "Remo sentado agarre neutro",
-              "sets": 4,
-              "reps": "10"
-            },
-            {
-              "name": "Elevaciones laterales con mancuernas",
-              "sets": 3,
-              "reps": "15"
-            },
-            {
-              "name": "Contractor inverso (reverse pec deck)",
-              "sets": 3,
-              "reps": "15",
-              "tag": "postural"
-            },
-            {
-              "name": "Fondos en máquina asistida",
               "sets": 3,
               "reps": "10"
-            },
-            {
-              "name": "Curl martillo con mancuernas",
-              "sets": 3,
-              "reps": "12"
-            },
-            {
-              "name": "Extensión de tríceps en máquina",
-              "sets": 3,
-              "reps": "12"
-            },
-            {
-              "name": "Plancha lateral",
-              "sets": 3,
-              "timed_s": "30-40",
-              "note": "por lado",
-              "progression": "time"
-            }
-          ]
-        },
-        {
-          "name": "Pierna A",
-          "repeat_days": [
-            "Martes"
-          ],
-          "exercises": [
-            {
-              "name": "Sentadilla en Smith o hack squat",
-              "sets": 4,
-              "reps": "10"
-            },
-            {
-              "name": "Prensa de piernas",
-              "sets": 4,
-              "reps": "12"
             },
             {
               "name": "Curl femoral tumbado",
@@ -254,7 +208,18 @@
               "reps": "12"
             },
             {
-              "name": "Extensión de cuádriceps",
+              "name": "Elevaciones laterales con mancuernas",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Contractor inverso",
+              "sets": 3,
+              "reps": "15",
+              "tag": "postural"
+            },
+            {
+              "name": "Curl martillo con mancuernas",
               "sets": 3,
               "reps": "12"
             },
@@ -271,21 +236,41 @@
           ]
         },
         {
-          "name": "Pierna B",
+          "name": "Full Body C",
           "repeat_days": [
             "Viernes"
           ],
           "exercises": [
             {
-              "name": "Peso muerto rumano",
+              "name": "Prensa de piernas",
+              "sets": 4,
+              "reps": "12"
+            },
+            {
+              "name": "Remo sentado agarre neutro",
               "sets": 4,
               "reps": "10"
+            },
+            {
+              "name": "Aperturas en máquina (pec deck)",
+              "sets": 3,
+              "reps": "12"
             },
             {
               "name": "Zancadas con mancuernas",
               "sets": 3,
               "reps": "12",
               "note": "por pierna"
+            },
+            {
+              "name": "Fondos en máquina asistida",
+              "sets": 3,
+              "reps": "10"
+            },
+            {
+              "name": "Curl femoral sentado",
+              "sets": 3,
+              "reps": "12"
             },
             {
               "name": "Máquina de abductores",
@@ -298,19 +283,15 @@
               "reps": "15"
             },
             {
-              "name": "Curl femoral sentado",
-              "sets": 3,
-              "reps": "12"
-            },
-            {
               "name": "Elevación de talones sentado (gemelos)",
               "sets": 4,
               "reps": "15"
             },
             {
-              "name": "Rueda abdominal (ab wheel)",
+              "name": "Plancha lateral",
               "sets": 3,
-              "reps": "12-15"
+              "timed_s": "30-40",
+              "note": "por lado"
             }
           ]
         }
@@ -319,8 +300,8 @@
         {
           "name": "Cardio intervalos",
           "days": [
-            "Miércoles",
-            "Sábado"
+            "Martes",
+            "Jueves"
           ],
           "type": "intervalos moderados cinta o bici",
           "duration_min": "20",
@@ -344,8 +325,7 @@
         {
           "name": "Push",
           "repeat_days": [
-            "Lunes",
-            "Jueves"
+            "Lunes"
           ],
           "exercises": [
             {
@@ -388,8 +368,7 @@
         {
           "name": "Pull",
           "repeat_days": [
-            "Martes",
-            "Viernes"
+            "Miércoles"
           ],
           "exercises": [
             {
@@ -434,7 +413,7 @@
         {
           "name": "Legs",
           "repeat_days": [
-            "Miércoles"
+            "Viernes"
           ],
           "exercises": [
             {
@@ -479,7 +458,8 @@
         {
           "name": "HIIT corto",
           "days": [
-            "Sábado"
+            "Martes",
+            "Jueves"
           ],
           "type": "HIIT corto",
           "duration_min": "15-20",
@@ -489,7 +469,7 @@
         {
           "name": "Cardio suave",
           "days": [
-            "Domingo"
+            "Sábado"
           ],
           "type": "cardio suave",
           "duration_min": "30",
@@ -519,5 +499,6 @@
       "reps": "10",
       "progression": "off"
     }
-  ]
+  ],
+  "prune_phase_routines": true
 }

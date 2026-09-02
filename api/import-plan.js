@@ -253,7 +253,7 @@ function deloadOf(routine, reduction, suffix) {
 export function importPlan(state, payload, { uid }) {
   const summary = {
     plan: payload?.plan || null,
-    routines: { created: [], updated: [] },
+    routines: { created: [], updated: [], removed: [] },
     exercises: { matched: [], custom_created: [], custom_reused: [], unresolved: [] },
     week: {},
     day_overrides: 0,
@@ -384,6 +384,7 @@ export function importPlan(state, payload, { uid }) {
   }
 
   /* --- deload weeks land on the calendar only when the plan says when it starts --- */
+  const writtenDates = new Set();
   if (startDate && emitDeload) {
     built.forEach(b => {
       if (!b.savedDeload) return;
@@ -391,7 +392,9 @@ export function importPlan(state, payload, { uid }) {
         b.weekdays.forEach(wd => {
           const d = new Date(startDate);
           d.setDate(d.getDate() + (week - 1) * 7 + ((wd + 6) % 7));
-          state.dayPlan[isoOf(d)] = b.savedDeload.id;
+          const iso = isoOf(d);
+          state.dayPlan[iso] = b.savedDeload.id;
+          writtenDates.add(iso);
           summary.day_overrides++;
         });
       });
@@ -400,8 +403,51 @@ export function importPlan(state, payload, { uid }) {
     summary.warnings.push('deload routines were created but not scheduled — add "start_date" (the Monday of plan week 1) to have them written into dayPlan');
   }
 
+  /* --- optional: drop what this plan used to have and no longer does --- */
+  if (payload.prune_phase_routines === true) {
+    prunePhaseRoutines(state, {
+      prefixes: phases.map((ph, i) => prefixOf(String(ph?.name || `Fase ${i + 1}`).trim(), i) + ' · '),
+      keepIds: new Set([...built.map(b => b.saved.id), ...built.filter(b => b.savedDeload).map(b => b.savedDeload.id),
+        ...(posturalRoutine ? [posturalRoutine.id] : [])]),
+      writtenDates,
+      summary
+    });
+  }
+
   state._ts = Date.now();
   return summary;
+}
+
+/**
+ * Remove the routines a previous version of this same plan left behind.
+ *
+ * Scoped deliberately narrowly, because this is the only thing in the importer that deletes:
+ *  · only routines whose name carries a phase prefix THIS payload produces (`F2 · …`), so a
+ *    routine the user wrote themselves can never match — it has no prefix;
+ *  · only those this import did not just write;
+ *  · opt-in (`prune_phase_routines: true`), never the default.
+ *
+ * It also clears the references left dangling: a `week` slot or a `dayPlan` date pointing at a
+ * routine that no longer exists renders as a rest day, which reads as a bug rather than as the
+ * deliberate removal it is. Stale deload dates are dropped for the same reason — a plan that
+ * used to train on Saturdays leaves Saturday overrides behind when it stops.
+ */
+function prunePhaseRoutines(state, { prefixes, keepIds, writtenDates, summary }) {
+  const managed = r => prefixes.some(p => (r.name || '').startsWith(p));
+  const doomed = state.routines.filter(r => managed(r) && !keepIds.has(r.id));
+  if (doomed.length) {
+    const gone = new Set(doomed.map(r => r.id));
+    state.routines = state.routines.filter(r => !gone.has(r.id));
+    doomed.forEach(r => summary.routines.removed.push(r.name));
+    Object.entries(state.week).forEach(([d, id]) => { if (gone.has(id)) delete state.week[d]; });
+    Object.entries(state.dayPlan).forEach(([iso, id]) => { if (gone.has(id)) delete state.dayPlan[iso]; });
+  }
+  // A date that still points at a routine this plan manages, but that the plan no longer
+  // schedules, is a leftover from the previous shape of the same plan.
+  const keptManaged = new Set(state.routines.filter(managed).map(r => r.id));
+  Object.entries(state.dayPlan).forEach(([iso, id]) => {
+    if (keptManaged.has(id) && !writtenDates.has(iso)) { delete state.dayPlan[iso]; summary.day_overrides_removed = (summary.day_overrides_removed || 0) + 1; }
+  });
 }
 
 

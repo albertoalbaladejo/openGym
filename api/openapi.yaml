@@ -1576,6 +1576,15 @@ components:
             resolves exactly one routine per calendar day. Defaults to the first phase.
         emit_deload_routines: { type: boolean, default: true }
         deload_suffix: { type: string, default: ' (descarga)' }
+        prune_phase_routines:
+          type: boolean
+          default: false
+          description: >-
+            Also DELETE the routines carrying a phase prefix this payload produces that this
+            import did not write — what a previous shape of the same plan left behind. Scoped:
+            a routine with no phase prefix (one the user wrote) can never match. Dangling `week`
+            slots, `dayPlan` dates and stale deload dates are cleared with it. Off by default;
+            the automatic backup is taken as on any other import.
         append_postural_to_training_days: { type: boolean, default: true }
         schedule_postural_on_rest_days: { type: boolean, default: true }
         postural_routine_name: { type: string, default: 'Postural diario' }
@@ -1731,6 +1740,10 @@ components:
           properties:
             created: { type: array, items: { type: string } }
             updated: { type: array, items: { type: string } }
+            removed:
+              type: array
+              items: { type: string }
+              description: 'Only ever non-empty with `prune_phase_routines: true`.'
         exercises:
           type: object
           properties:
@@ -1766,6 +1779,11 @@ components:
           description: 'Weekday index (0 = Sunday) → the routine name scheduled on it.'
           additionalProperties: { type: string }
         day_overrides: { type: integer }
+        day_overrides_removed:
+          type: integer
+          description: >-
+            Stale deload dates dropped by `prune_phase_routines` — dates this plan used to
+            schedule and no longer does. Absent when nothing was pruned.
         warnings:
           type: array
           items: { type: string }
