@@ -1056,9 +1056,39 @@ const routes = {
     const dry = /^(1|true|yes|on)$/i.test(String(q.get('dry_run') || body.dry_run || ''));
 
     // Read-modify-write, the same way the web UI's PUT /api/data does. There is no lock between
-    // the two (see mcp/README.md's Phase 2 note): a browser that syncs while an import is in
-    // flight can still overwrite it. Import with the app closed — documented, not pretended away.
+    // the two: a browser that syncs while an import is in flight can still overwrite it. Import
+    // with the app closed — documented, not pretended away (docs/LLM_INTEGRATION.md §2.3).
     const state = readState(user.id) || emptyState();
+
+    // Optimistic concurrency. The app stamps `_ts` on every mutation and PUTs the whole state
+    // 1.5 s later (frontend/src/store/useStore.js), and PUT /api/data does no version check —
+    // so an import and a phone in a pocket are a last-writer-wins race with no loser reported.
+    // A caller that passes the `_ts` it planned against gets told when the state moved instead
+    // of silently overwriting the change. Omitting it keeps the old behaviour, so the script
+    // and every hand-run import already in use are unaffected.
+    const previousTs = typeof state._ts === 'number' ? state._ts : null;
+    const hasExpected = Object.prototype.hasOwnProperty.call(body, 'expected_ts') || q.has('expected_ts');
+    if (hasExpected) {
+      const raw = q.has('expected_ts') ? q.get('expected_ts') : body.expected_ts;
+      // null is a meaningful value, not a missing one: it says "I planned against a profile that
+      // has never synced". Sending it protects a first import exactly like a number protects a
+      // later one.
+      const expected = raw === null || raw === '' || raw === undefined ? null : Number(raw);
+      if (expected !== null && !Number.isFinite(expected)) {
+        return json(res, 400, { error: `expected_ts must be a number or null, got ${JSON.stringify(raw)}` });
+      }
+      if (expected !== previousTs) {
+        // Refused before anything is read further, and long before anything is written.
+        audit(req, 'import.conflict', { user, msg: `expected_ts ${expected} != ${previousTs}` });
+        return json(res, 409, {
+          error: 'the profile changed since you read it — nothing was written',
+          expected_ts: expected,
+          actual_ts: previousTs,
+          hint: 'run again with dry_run=1, read state_ts from the response, and retry with that value (or omit expected_ts to write regardless)'
+        });
+      }
+    }
+
     let summary;
     try { summary = importPlan(state, body, { uid }); }
     catch (e) { return json(res, e.status || 400, { error: e.message }); }
@@ -1080,6 +1110,11 @@ const routes = {
       dry_run: dry,
       user_id: user.id,
       backup,
+      // Always "the value to send as expected_ts on your next call": after a real import that is
+      // the timestamp just written, after a dry run it is the untouched one still on disk. A
+      // caller can therefore chain calls without a second route to read the state from — which
+      // matters for an LLM, whose only view of this profile is what this endpoint answers.
+      state_ts: dry ? previousTs : (typeof state._ts === 'number' ? state._ts : null),
       counts: {
         routines_created: summary.routines.created.length,
         routines_updated: summary.routines.updated.length,

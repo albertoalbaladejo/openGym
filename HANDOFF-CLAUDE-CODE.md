@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 3 — PR #1 mergeado, cron de sync activo y probado, diseño de integración LLM escrito. BLOQUEADO en el import real: el perfil de passkey todavía no existe.**
+Última actualización: **2026-09-02, sesión 4 — blindaje del endpoint (OpenAPI + expected_ts + state_ts) hecho, 48/48 tests. SIGUE BLOQUEADO el import real: el perfil de passkey todavía no existe.**
 
 ---
 
@@ -171,3 +171,148 @@ import real son dos comandos: el backup manual extra y el `import-plan.mjs` sin 
   heartbeat de `/api/activity` sólo late **durante un entreno** (`Workout.jsx:625`, cada 20 s),
   así que una app abierta pero ociosa sigue siendo invisible. La regla operativa "importa con la
   app cerrada" sobrevive al diseño.
+
+---
+
+## 6. Sesión 4 — checklist final
+
+| # | Punto | Estado |
+|---|---|---|
+| 1 | PR #1 mergeado y verificado en el remoto | ✅ **sigue así** |
+| 2 | Passkey creada y verificada en servidor | ⛔ **BLOQUEADO — depende de ti** |
+| 3 | Import real ejecutado y verificado en la app desde el móvil | ⛔ **BLOQUEADO por el punto 2** |
+| 4 | `openapi.yaml` actualizado con el endpoint | ✅ hecho |
+| 5 | `expected_ts` + `409` implementado y con test | ✅ hecho |
+| 6 | `state_ts` en la respuesta, documentado | ✅ hecho |
+| 7 | Recuento de tests | ✅ **43 → 48**, todos verdes |
+| 8 | `docs/IMPORT_API.md` actualizado con el contrato nuevo | ✅ hecho (§2.1 nueva) |
+| 9 | `LLM_INTEGRATION.md`: qué se implementó y qué queda | ✅ hecho (§5 con columna de estado, §6 "Pendiente") |
+| 10 | `mcp/` sin tocar ni duplicar | ✅ confirmado |
+| 11 | `sync-upstream.yml` sigue activo | ✅ `[active]`, no hacía falta relanzarlo |
+| 12 | Hallazgos nuevos no resolubles por mí | ✅ anotados abajo |
+
+### Punto 1 — PR #1 (verificado contra la API de GitHub)
+
+```
+$ gh api /repos/albertoalbaladejo/openGym/branches/main --jq .commit.sha
+2f1dffad7eadceae1c96aec4205b86a1084fc855   (antes de los commits de esta sesión)
+$ git merge-base --is-ancestor cce7769 origin/main  →  sí
+```
+
+`cce7769`, `7c67519`, `28a1e54` y el merge `c20f8c4` siguen alcanzables desde `main`.
+
+### Punto 2 — Passkey: BLOQUEADO, y no es un fallo del servidor
+
+```
+$ curl -s https://gym.albertoalbaladejo.com/api/health
+{"ok":true,"users":0}
+$ sudo ls data/            → audit.log  secret  vapid.json      (sigue sin db.json)
+$ sudo cat data/audit.log  → 4 líneas, todas import.denied de mis propias pruebas
+$ docker compose logs api --since 24h | grep -iE "register|login|verify"  → vacío
+```
+
+**Cero peticiones de registro han llegado al servidor en 24 h.** El lado servidor está
+comprobado y correcto:
+
+```
+rp: {'name': 'openGym', 'id': 'gym.albertoalbaladejo.com'}
+authenticatorSelection: {'residentKey': 'required', 'userVerification': 'preferred'}
+config: {"invite_only":false,"allow_guest":true}
+```
+
+Sin `Permissions-Policy` que bloquee WebAuthn. `POST /api/register/options` responde bien por
+HTTPS con el RP correcto.
+
+**Lo que debes ver al abrir https://gym.albertoalbaladejo.com en el móvil** (de `Login.jsx`):
+el logo de mancuerna, "openGym", y **tres** botones — *Sign in with passkey*, *Create new
+profile*, *Continue without account*.
+
+* Si ves los tres → pulsa **Create new profile**, pon nombre, acepta Face ID/huella. Si falla
+  ahí, el mensaje de error del navegador es lo único útil: pásamelo literal.
+* Si en vez de los dos primeros botones ves **una tarjeta gris** diciendo que el navegador no
+  soporta passkeys → `window.PublicKeyCredential` no existe, que en la práctica significa
+  **estás en un WebView** (el navegador embebido de Instagram / WhatsApp / Telegram / LinkedIn).
+  Ábrelo en Safari o Chrome de verdad.
+
+### Punto 3 — Import real: BLOQUEADO, con el preflight ya hecho
+
+El endpoint responde `404 {"error":"this instance has 0 profiles — pass user_id","profiles":[]}`.
+No se puede importar contra un perfil inexistente.
+
+Preflight repetido en esta sesión contra instancia aislada, con el código actual:
+
+```
+routines    25 created, 0 updated
+exercises   60 matched in the catalogue, 8 created as custom, 0 custom reused
+calendar    30 day overrides would be written (deload weeks)
+```
+
+**Idéntico a lo verificado en las dos sesiones anteriores.** En cuanto exista el perfil:
+
+```bash
+sudo cp data/state-<uid>.json data/state-<uid>.json.manual-$(date +%Y%m%d-%H%M%S)   # backup extra
+node scripts/import-plan.mjs plans/plan-alberto-6-meses.json --dry-run              # anota state_ts
+node scripts/import-plan.mjs plans/plan-alberto-6-meses.json --expected-ts <ese state_ts>
+```
+
+Y después, lo que tendrás que mirar tú en el móvil (yo no puedo: no hay navegador conectado a
+esta sesión y la vista Plan no se puede leer desde el JSON):
+
+* pestaña **Plan** → 25 rutinas, empezando por `F1 · Full Body`, `F1 · Full Body (descarga)`,
+  `F1 · Cardio moderado`, `F2 · Torso A`…
+* abre `F2 · Torso A` → 12 ejercicios; *Press de banca plano* debe decir **4 × 8-10**;
+  *Curl de bíceps con mancuernas* y *Extensión de tríceps en polea* deben salir **enlazados como
+  superserie**; los tres últimos (*Chin tucks*, *Estiramiento de pectoral*, *Wall angels*) llevan
+  la nota **postural**.
+* la vista de semana: Lun/Mié/Vie `F1 · Full Body`, Mar/Sáb `F1 · Cardio moderado`,
+  Jue/Dom `Postural diario`.
+* *Plancha lateral* en `F2 · Torso B` debe mostrarse en **segundos (0:30)**, no en repeticiones.
+
+### Puntos 4-6 — lo implementado
+
+* **`api/openapi.yaml`**: ruta `/api/admin/import-plan` (`operationId: importPlan`), tag `import`,
+  `securitySchemes.importKey` (`apiKey` en la cabecera `X-Import-Key`), y 6 esquemas nuevos
+  (`ImportPlanRequest`, `ImportPhase`, `ImportDay`, `ImportExercise`, `ImportPlanSummary`,
+  `ImportConflict`). Respuestas documentadas: 200, 400, 401, 404, 409, 429, 501 — exactamente las
+  que el servidor devuelve, ni una de más.
+  Validado con `npx @redocly/cli lint`: **"Your API description is valid"**, 6 warnings, **ninguna
+  sobre la ruta nueva** (son las 5 rutas preexistentes sin respuesta 4xx y el `example.com` de
+  `servers`). 27 → **28 rutas**, 0 `$ref` rotas.
+* **`expected_ts` + `409`**: comprobado *antes* de leer nada más y mucho antes de escribir.
+  `null` es un valor con significado ("planifiqué contra un perfil que nunca ha sincronizado"),
+  no una ausencia. Omitir el campo mantiene el comportamiento anterior — el script y los imports
+  a mano ya en uso no se rompen. El conflicto se registra como `import.conflict` en el audit log.
+* **`state_ts`** en toda respuesta 200: *siempre* "lo que mandar como `expected_ts` la próxima
+  vez" — tras un import real, el timestamp recién escrito; tras un `dry_run`, el intacto que hay
+  en disco. Así un LLM encadena llamadas sin necesitar una segunda ruta de lectura (que es
+  justamente lo que no queremos crear, ver punto 10).
+* **`scripts/import-plan.mjs`**: `--expected-ts <n|null>`, imprime `state_ts`, y explica el 409
+  diciendo con qué valor reintentar.
+
+Probado de punta a punta contra una instancia aislada: dry-run → `state_ts: null` → import real
+con `--expected-ts null` → `state_ts: 1788351179452` → repetir con el `null` viejo → **409** con
+`actual_ts` correcto y sin escribir.
+
+### Punto 7 — tests
+
+**43 → 48.** Los 5 nuevos están en `api/import-auth.test.js` y cubren: semántica de `state_ts`
+(dry-run vs escritura real), `expected_ts` correcto incluido `null`, `expected_ts` desfasado →
+409 sin escribir, ausencia del campo → comportamiento antiguo, y `expected_ts` no numérico → 400.
+`cd api && node --test` → **48/48**.
+
+### Punto 10 — `mcp/` intacto
+
+`git status --short mcp/` y `git diff --stat HEAD -- mcp/` → vacíos. No se ha leído para
+modificar, ni cambiado, ni duplicada su función de lectura. El endpoint HTTP no ha ganado
+superficie de lectura: sigue contestando sólo sobre el import que acaba de hacer. Documentado en
+`docs/LLM_INTEGRATION.md` §6.4.
+
+### Punto 12 — hallazgo nuevo, menor, no bloqueante
+
+`curl -sI https://gym.albertoalbaladejo.com/` devuelve **`X-Frame-Options` dos veces**:
+`DENY` (del nginx dentro del contenedor `web`) y `SAMEORIGIN` (del vhost del host que escribí
+yo). Ante valores en conflicto los navegadores aplican el más restrictivo, así que el efecto real
+es `DENY` — que es lo que openGym quiere. Es duplicación cosmética, no un fallo. Se arregla
+quitando las cabeceras duplicadas de `/etc/nginx/sites-available/gym.albertoalbaladejo.com`.
+**No lo he tocado** porque implica editar el vhost y recargar nginx por algo puramente estético.
+Dime si quieres que lo limpie.

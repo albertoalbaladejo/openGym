@@ -126,3 +126,82 @@ test('the import never touches db.json — no profile is created, renamed or dis
     assert.equal(fs.readFileSync(path.join(s.data, 'db.json'), 'utf8'), before);
   } finally { s.stop(); }
 });
+
+/* ---------- optimistic concurrency: expected_ts / 409 / state_ts ---------- */
+
+test('state_ts is always the value to send back: the untouched one on a dry run, the new one after a write', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY });
+  try {
+    const dry0 = await (await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?dry_run=1')).json();
+    assert.equal(dry0.state_ts, null, 'a profile that has never synced has no timestamp');
+
+    const wrote = await (await s.post(MINIMAL, { 'X-Import-Key': KEY })).json();
+    assert.equal(typeof wrote.state_ts, 'number');
+    const onDisk = JSON.parse(fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8'));
+    assert.equal(wrote.state_ts, onDisk._ts, 'it is the timestamp actually written');
+
+    const dry1 = await (await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?dry_run=1')).json();
+    assert.equal(dry1.state_ts, wrote.state_ts, 'a dry run reports the state on disk, not one it would write');
+  } finally { s.stop(); }
+});
+
+test('a matching expected_ts is accepted — including null for a profile that never synced', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY });
+  try {
+    const first = await s.post({ ...MINIMAL, expected_ts: null }, { 'X-Import-Key': KEY });
+    assert.equal(first.status, 200);
+    const b1 = await first.json();
+    assert.ok(fs.existsSync(path.join(s.data, `state-${UID}.json`)));
+
+    const second = await s.post({ ...MINIMAL, expected_ts: b1.state_ts }, { 'X-Import-Key': KEY });
+    assert.equal(second.status, 200, 'chaining on the returned state_ts works');
+    const b2 = await second.json();
+    assert.notEqual(b2.state_ts, b1.state_ts, 'and moves the timestamp on');
+  } finally { s.stop(); }
+});
+
+test('a stale expected_ts is a 409 and writes nothing', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY });
+  try {
+    const b1 = await (await s.post(MINIMAL, { 'X-Import-Key': KEY })).json();
+    const before = fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8');
+
+    const res = await s.post({ ...MINIMAL, expected_ts: b1.state_ts - 1 }, { 'X-Import-Key': KEY });
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.expected_ts, b1.state_ts - 1);
+    assert.equal(body.actual_ts, b1.state_ts, 'the caller is told what to retry with');
+    assert.equal(fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8'), before, 'the state is untouched');
+
+    // A number where the profile has none is just as much a conflict as the wrong number.
+    const s2 = await startServer({ IMPORT_API_KEY: KEY });
+    try {
+      const r2 = await s2.post({ ...MINIMAL, expected_ts: 1 }, { 'X-Import-Key': KEY });
+      assert.equal(r2.status, 409);
+      assert.equal((await r2.json()).actual_ts, null);
+      assert.equal(fs.existsSync(path.join(s2.data, `state-${UID}.json`)), false);
+    } finally { s2.stop(); }
+  } finally { s.stop(); }
+});
+
+test('omitting expected_ts keeps the old behaviour — the script already in use is unaffected', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY });
+  try {
+    await s.post(MINIMAL, { 'X-Import-Key': KEY });
+    const before = JSON.parse(fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8'));
+    const res = await s.post(MINIMAL, { 'X-Import-Key': KEY });     // no expected_ts, stale by definition
+    assert.equal(res.status, 200, 'no check asked for, no check applied');
+    const after = JSON.parse(fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8'));
+    assert.ok(after._ts >= before._ts);
+  } finally { s.stop(); }
+});
+
+test('an expected_ts that is not a number is a 400, not a silent no-check', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY });
+  try {
+    const res = await s.post({ ...MINIMAL, expected_ts: 'ayer' }, { 'X-Import-Key': KEY });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /expected_ts/);
+    assert.equal(fs.existsSync(path.join(s.data, `state-${UID}.json`)), false);
+  } finally { s.stop(); }
+});

@@ -82,6 +82,10 @@ tags:
     description: Live-workout presence heartbeat
   - name: admin
     description: Admin dashboard — requires an admin session (`ADMIN_UIDS` or `admin:true`)
+  - name: import
+    description: >-
+      Plan import from a script or an LLM — a service key, not a session.
+      Fork-only; not part of upstream openGym.
 
 security:
   - cookieAuth: []
@@ -984,6 +988,137 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/admin/import-plan:
+    post:
+      tags: [import]
+      operationId: importPlan
+      security:
+        - importKey: []
+      summary: Import a whole training plan into one profile
+      description: |
+        Writes phases, days, exercises, progression policies and deload weeks into one
+        profile's `state-<uid>.json`, so a plan generated outside the app — by a script or
+        by an LLM — can be loaded in one call. Full payload reference:
+        [`docs/IMPORT_API.md`](https://github.com/albertoalbaladejo/openGym/blob/main/docs/IMPORT_API.md).
+
+        **Not an admin-session route.** Despite the path it does not use `requireAdmin`:
+        the caller is a script, which has no passkey and no cookie jar. It authenticates
+        with the `X-Import-Key` header against `IMPORT_API_KEY`, compared in constant time.
+
+        **Off unless configured.** With `IMPORT_API_KEY` unset the route answers `501` and
+        does nothing — an instance nobody switched this on for does not get a half-open
+        write path into somebody's training plan.
+
+        **What it can reach.** `routines`, `week`, `dayPlan`, `customEx` and `_ts` inside one
+        `state-<uid>.json`, after copying the previous file to
+        `state-<uid>.json.bak-<timestamp>`. It never touches `db.json` (profiles, passkeys,
+        push subscriptions, invites), never touches logged `workouts`, `bodyweight`,
+        `exWeights` or any setting, and never modifies a routine the user made themselves.
+
+        **Idempotent.** Routines are upserted by name and keep their id, so the weekly
+        schedule and any logged history stay attached to them. A second identical import
+        leaves the state byte-identical apart from `_ts`.
+
+        **Concurrency.** The app stamps `_ts` on every change and PUTs the whole state 1.5 s
+        later, and `PUT /api/data` does no version check — so an import and an open app are a
+        last-writer-wins race. Pass `expected_ts` (the `state_ts` a previous call returned)
+        to be told with a `409` when the profile moved, instead of overwriting silently.
+        Omitting it keeps the unchecked behaviour.
+
+        Rate limited per peer address: `IMPORT_RATE_MAX` requests (default 10) per
+        `IMPORT_RATE_WINDOW_S` seconds (default 300).
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Profile id, or exact profile name. Optional on a single-profile instance;
+            required as soon as there is more than one. Also accepted in the body.
+        - name: dry_run
+          in: query
+          required: false
+          schema: { type: string, enum: ['1', 'true', 'yes', 'on'] }
+          description: >-
+            Resolve everything, report what would happen, write nothing. Also accepted
+            in the body as `dry_run`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportPlanRequest' }
+      responses:
+        '200':
+          description: Imported, or (with `dry_run`) resolved and reported.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportPlanSummary' }
+        '400':
+          description: >-
+            Not a plan (`no phases and no daily_postural_routine`), a `start_date` that is
+            not an ISO date, an `expected_ts` that is not a number, or malformed JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "payload has no phases and no daily_postural_routine" }
+        '401':
+          description: >-
+            `X-Import-Key` missing or wrong. Recorded in the audit log as `import.denied`,
+            never with the key itself.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "bad or missing X-Import-Key" }
+        '404':
+          description: No such profile. The body lists the profiles that do exist.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      profiles:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            name: { type: string }
+              example:
+                error: 'no profile with id or name "nobody"'
+                profiles: [{ id: "Zk3q9XyPbA2LmN0v", name: "Ada" }]
+        '409':
+          description: >-
+            `expected_ts` was sent and the profile has moved since. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportConflict' }
+        '429':
+          description: Rate limited. `Retry-After` says for how long.
+          headers:
+            Retry-After:
+              schema: { type: integer }
+              description: Seconds until the window resets.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: "too many import requests" }
+        '501':
+          description: >-
+            `IMPORT_API_KEY` is not set on this instance, so the endpoint is inert.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      hint: { type: string }
+              example:
+                error: "plan import is not enabled on this instance"
+                hint: "set IMPORT_API_KEY in .env and restart the api container"
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1003,6 +1138,16 @@ components:
         The same signed session token, carried as `Authorization: Bearer <token>` by
         the paired mobile app (obtained from `POST /api/pair/redeem`). Bearer requests
         skip the CSRF origin check — a browser never attaches this header on its own.
+    importKey:
+      type: apiKey
+      in: header
+      name: X-Import-Key
+      description: >-
+        Service credential for `POST /api/admin/import-plan`, compared in constant time
+        against the `IMPORT_API_KEY` environment variable. Not a session and not scoped to
+        a user: one key can write the plan of any profile on the instance, so it is an
+        operator credential, not a per-user token. Unset ⇒ the route answers `501`.
+        Never sent to the frontend, never written to the audit log.
 
   responses:
     Unauthorized:
@@ -1396,3 +1541,265 @@ components:
         ok: true
         uid: Zk3q9XyPbA2LmN0v
         name: Ada
+
+    # -------------------------------------------------------------- plan import
+    # Fork-only (POST /api/admin/import-plan). The prose reference, with the reasoning
+    # behind each field, is docs/IMPORT_API.md; this is the machine-readable half, and it
+    # is what an LLM with function calling consumes.
+    ImportPlanRequest:
+      type: object
+      description: >-
+        A plan to write. Either `phases` or `daily_postural_routine` must be present.
+        openGym has no phases, plan weeks or per-day layering of its own — those are
+        flattened on import (see the endpoint description).
+      properties:
+        plan: { type: string, description: 'Label, for the summary only.' }
+        user_id: { type: string, description: 'Same as the query parameter.' }
+        dry_run: { type: boolean, description: 'Same as the query parameter.' }
+        expected_ts:
+          type: [number, 'null']
+          description: >-
+            Optimistic concurrency. The `state_ts` a previous call returned. When present and
+            no longer current, the import answers `409` and writes nothing. `null` means "a
+            profile that has never synced" and is checked just as strictly as a number.
+            Omit the field entirely to skip the check.
+        start_date:
+          type: string
+          format: date
+          description: >-
+            ISO date of the MONDAY of plan week 1. Without it the deload routines are still
+            created but never land on the calendar, and the response carries a warning.
+        active_phase:
+          type: [string, integer]
+          description: >-
+            Which phase fills the weekly schedule, by name or index. Only one can: openGym
+            resolves exactly one routine per calendar day. Defaults to the first phase.
+        emit_deload_routines: { type: boolean, default: true }
+        deload_suffix: { type: string, default: ' (descarga)' }
+        append_postural_to_training_days: { type: boolean, default: true }
+        schedule_postural_on_rest_days: { type: boolean, default: true }
+        postural_routine_name: { type: string, default: 'Postural diario' }
+        phases:
+          type: array
+          items: { $ref: '#/components/schemas/ImportPhase' }
+        daily_postural_routine:
+          type: array
+          description: >-
+            Exercises appended to every training routine AND published as a standalone
+            routine on the weekdays the active phase leaves empty.
+          items: { $ref: '#/components/schemas/ImportExercise' }
+
+    ImportPhase:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: >-
+            Becomes the routine-name prefix (`Fase 2 — …` → `F2 · <day>`) and, with the day
+            name, the idempotency key.
+        weeks:
+          type: array
+          items: { type: integer }
+          description: 'Documentation only — openGym has no plan weeks.'
+        progression_default:
+          type: string
+          description: >-
+            `off` | `linear` | `greyskull` | `double` | `time`, or a friendlier spelling
+            (`double_progression`, `doble progresión`, `greyskull_lp`, `tiempo`).
+            Anything else is a warning and falls through to the app default.
+        deload_weeks:
+          type: array
+          items: { type: integer }
+          description: 'Absolute plan weeks, 1-based.'
+        deload_volume_reduction:
+          type: number
+          description: '0.4 = 40 % fewer sets, same weight.'
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/ImportDay' }
+        cardio:
+          type: array
+          description: 'Cardio blocks; each becomes a routine of its own.'
+          items: { type: object }
+
+    ImportDay:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, description: 'The other half of the idempotency key.' }
+        repeat_days:
+          type: array
+          items: { type: [string, integer] }
+          description: >-
+            Weekday names, Spanish or English, with or without a parenthesised note
+            ("Sábado (opcional)"). A day with none is created but never scheduled.
+        progression: { type: string, description: 'Overrides the phase default.' }
+        append_postural: { type: boolean, description: 'Set false to opt this day out of the postural block.' }
+        exercises:
+          type: array
+          items: { $ref: '#/components/schemas/ImportExercise' }
+
+    ImportExercise:
+      type: object
+      description: >-
+        One prescribed exercise. Give `reps`, `timed_s` or `duration_min` — exactly one.
+        Omitting all three defaults to 10 reps and raises a warning.
+      properties:
+        name:
+          type: string
+          description: >-
+            Matched against the catalogue: parenthesised notes and an " o <alternativa>"
+            tail are stripped, then the CSV importer's own matchExercise(), then a curated
+            Spanish→English table. Anything left over becomes a custom exercise rather than
+            being dropped.
+        exercise_id:
+          type: string
+          description: >-
+            A catalogue id ("0025") or a custom id already on the profile. Skips matching
+            entirely. An id that resolves to nothing is reported as unresolved, never
+            silently replaced with a lookalike.
+        sets: { type: integer, default: 1 }
+        reps:
+          type: [string, integer]
+          description: 'A target ("12") or a range ("8-10"). A range is what double progression needs.'
+        timed_s:
+          type: [string, integer]
+          description: >-
+            A HOLD, in seconds; writes mode "time". **Without this a 45-second plank is
+            logged as 45 repetitions** — the costliest mistake this payload can make. A
+            range takes its bottom end, because the `time` policy is what raises it.
+        duration_min: { type: [string, integer], description: 'A cardio block; writes mode "cardio".' }
+        speed: { type: number, description: 'km/h, cardio only.' }
+        starting_weight_kg:
+          type: [string, number]
+          description: >-
+            openGym stores one number. A range ("20-30") keeps its bottom end and the text
+            you wrote lands in the exercise note.
+        rest_s: { type: integer }
+        per_side:
+          type: boolean
+          description: >-
+            Repetitions counted per side. Rep work only — a hold has no reps to split and a
+            per-side *weight* is a loading instruction; both are kept as notes instead.
+        bodyweight: { type: boolean, description: "Overrides the catalogue's own equipment flag." }
+        progression: { type: string, description: 'Per-exercise override of the routine policy.' }
+        increment_kg: { type: number }
+        warmup_sets: { type: integer }
+        superset_with:
+          type: string
+          description: >-
+            Names the other exercise. openGym only groups ADJACENT exercises; a pair that is
+            not neighbouring is reported and left ungrouped rather than written as a group
+            the app would silently drop.
+        tag:
+          type: string
+          description: >-
+            openGym has no tag field. This is written into `note`, visible in the routine
+            editor, but the muscle map does not read it.
+        note: { type: string }
+
+    ImportPlanSummary:
+      type: object
+      properties:
+        ok: { type: boolean, const: true }
+        dry_run: { type: boolean }
+        user_id: { type: string }
+        backup:
+          type: [string, 'null']
+          description: >-
+            Filename of the copy taken before writing, in the same ./data directory.
+            `null` on a dry run, and on the very first import (nothing to copy).
+        state_ts:
+          type: [number, 'null']
+          description: >-
+            Always "the value to send as `expected_ts` next time": after a real import the
+            timestamp just written, after a dry run the untouched one still on disk. Lets a
+            caller chain safely without a second route to read the state from.
+        counts:
+          type: object
+          properties:
+            routines_created: { type: integer }
+            routines_updated: { type: integer }
+            exercises_matched: { type: integer }
+            exercises_custom_created: { type: integer }
+            exercises_custom_reused: { type: integer }
+            exercises_unresolved: { type: integer }
+            day_overrides: { type: integer }
+        routines:
+          type: object
+          properties:
+            created: { type: array, items: { type: string } }
+            updated: { type: array, items: { type: string } }
+        exercises:
+          type: object
+          properties:
+            matched:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  id: { type: string }
+                  via:
+                    type: string
+                    enum: [explicit-id, catalogue, catalogue-es]
+            custom_created:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  id: { type: string }
+                  body_part: { type: string }
+            custom_reused: { type: array, items: { type: object } }
+            unresolved:
+              type: array
+              description: 'Reported, never fatal — the rest of the import still goes through.'
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  reason: { type: string }
+        week:
+          type: object
+          description: 'Weekday index (0 = Sunday) → the routine name scheduled on it.'
+          additionalProperties: { type: string }
+        day_overrides: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+          description: >-
+            A 200 with warnings is not a clean success. Read them: a missing `start_date`,
+            a rep range filled in for you, or a superset that could not be grouped all
+            arrive here rather than as an error.
+      example:
+        ok: true
+        dry_run: false
+        user_id: Zk3q9XyPbA2LmN0v
+        backup: state-Zk3q9XyPbA2LmN0v.json.bak-2026-09-02T10-26-01-186Z
+        state_ts: 1788351179452
+        counts:
+          routines_created: 25
+          routines_updated: 0
+          exercises_matched: 60
+          exercises_custom_created: 8
+          exercises_custom_reused: 0
+          exercises_unresolved: 0
+          day_overrides: 30
+
+    ImportConflict:
+      type: object
+      description: >-
+        `expected_ts` was sent and no longer matches. Nothing was written. The app changed
+        the profile in the meantime — most likely a phone that synced.
+      properties:
+        error: { type: string }
+        expected_ts: { type: [number, 'null'], description: 'What the caller planned against.' }
+        actual_ts: { type: [number, 'null'], description: 'What the profile is actually at now.' }
+        hint: { type: string }
+      example:
+        error: 'the profile changed since you read it — nothing was written'
+        expected_ts: 1788351179452
+        actual_ts: 1788351401118
+        hint: 'run again with dry_run=1, read state_ts from the response, and retry with that value (or omit expected_ts to write regardless)'

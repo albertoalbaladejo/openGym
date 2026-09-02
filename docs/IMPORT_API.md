@@ -51,17 +51,60 @@ Content-Type: application/json
 |---|---|---|
 | query or body | `user_id` | Profile id (or exact profile name). Optional on a single-profile instance. |
 | query or body | `dry_run` | `1` resolves everything and reports, and writes nothing. |
+| body | `expected_ts` | Optimistic concurrency — see §2.1. Omit it to skip the check. |
 
 Responses:
 
 | Code | When |
 |---|---|
 | `200` | Imported (or dry-run). Body is the summary in §5. |
-| `400` | The payload is not a plan (`no phases and no daily_postural_routine`, a bad `start_date`, bad JSON). |
+| `400` | The payload is not a plan (`no phases and no daily_postural_routine`, a bad `start_date`, an `expected_ts` that is not a number, bad JSON). |
 | `401` | `X-Import-Key` missing or wrong. |
 | `404` | No such profile. The body lists the profiles that do exist. |
+| `409` | `expected_ts` was sent and the profile has moved since. Nothing was written — see §2.1. |
 | `429` | Rate limited. `Retry-After` says how long. |
 | `501` | `IMPORT_API_KEY` is not set on this instance. |
+
+There is a machine-readable version of all of this in
+[`api/openapi.yaml`](../api/openapi.yaml) (OpenAPI 3.1, `operationId: importPlan`) — that is
+what an LLM with function calling should be handed, rather than this page.
+
+### 2.1 `expected_ts` and `state_ts` — writing safely while the app exists
+
+The app stamps `_ts` on every change and PUTs the **whole** state 1.5 s later
+(`frontend/src/store/useStore.js`), and `PUT /api/data` does no version check. An import and a
+phone in a pocket are therefore a last-writer-wins race in which nothing reports the loser.
+
+Two fields make that visible:
+
+* **Every successful response carries `state_ts`** — always *the value to send as `expected_ts`
+  on your next call*. After a real import it is the timestamp just written; after a dry run it is
+  the untouched one still on disk. So a caller can chain calls without a second route to read the
+  state from, which is what an LLM needs.
+* **Send `expected_ts` on the real call.** If the profile has moved since, the endpoint answers
+  `409` and writes nothing:
+
+```jsonc
+{
+  "error": "the profile changed since you read it — nothing was written",
+  "expected_ts": 1788351179452,
+  "actual_ts":   1788351401118,
+  "hint": "run again with dry_run=1, read state_ts from the response, and retry with that value (or omit expected_ts to write regardless)"
+}
+```
+
+`null` is a meaningful value, not a missing one: it says *"I planned against a profile that has
+never synced"*, and is checked just as strictly as a number. **Omitting the field entirely** keeps
+the old unchecked behaviour, so nothing already in use breaks.
+
+The bundled script speaks it too:
+
+```bash
+node scripts/import-plan.mjs plan.json --dry-run                 # prints state_ts
+node scripts/import-plan.mjs plan.json --expected-ts 1788351179452
+```
+
+What this does **not** solve is in §7.
 
 The endpoint does **not** read a session cookie, does **not** use the admin dashboard's
 `ADMIN_UIDS`, and never writes `db.json`. It can only rewrite the plan half of an existing
@@ -240,6 +283,7 @@ The response tells you which route each exercise took (`via`): `explicit-id`, `c
   "dry_run": false,
   "user_id": "abc123",
   "backup": "state-abc123.json.bak-2026-09-02T10-26-01-186Z",
+  "state_ts": 1788351179452,          // send this back as expected_ts next time
   "counts": {
     "routines_created": 25, "routines_updated": 0,
     "exercises_matched": 60, "exercises_custom_created": 8, "exercises_custom_reused": 0,
@@ -282,10 +326,16 @@ backups are never pruned — delete the old ones yourself.
 
 ## 7. Limits worth knowing before you rely on it
 
-* **No lock against the web UI.** The endpoint does read-modify-write on `state-<uid>.json`,
-  and so does the app's own `PUT /api/data`. A browser that syncs while an import is in flight
-  can overwrite it. Import with the app closed. (The MCP server's roadmap flags the same gap
-  for its planned write tools — see `mcp/README.md`.)
+* **No lock against the web UI — `expected_ts` detects, it does not prevent.** The endpoint does
+  read-modify-write on `state-<uid>.json`, and so does the app's own `PUT /api/data`.
+  `expected_ts` turns "the import silently lost" into a `409` you can act on, and it covers the
+  case where the app has already pushed. It does **not** cover an app sitting on changes it has
+  not pushed yet: that push still lands after the import and still wins. There is no lock,
+  because the browser does not take one and cannot be asked to.
+  **Import with the app closed, or pull-to-refresh in the app immediately afterwards.**
+  Also true of concurrent imports: two overlapping calls without `expected_ts` are a race
+  between themselves. (The MCP server's roadmap flags the same gap for its planned write
+  tools — see `mcp/README.md`; the fuller design is in `docs/LLM_INTEGRATION.md` §2.)
 * **Phases are a naming convention, not a feature.** openGym has no mesocycles. Every
   phase × day becomes one flat routine named `F2 · Torso A`, and only the `active_phase` is
   written into the weekly schedule. Switching phase later means re-running the import with a

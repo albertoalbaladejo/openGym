@@ -1,6 +1,8 @@
 # Letting an external LLM write a plan into openGym
 
-**Status: design. No code has been written for anything in this document.**
+**Status: partly implemented.** Steps 1–3 of §5 shipped on 2026-09-02 — the endpoint is in
+`api/openapi.yaml`, and `expected_ts` / `state_ts` / `409` exist and are tested. Steps 4–8 are
+**not** built; §6 says exactly what is still missing and why it was deferred.
 
 The goal: describe a plan in words to an LLM — *"a 4-day strength plan, prioritise legs"* — and
 have it land in openGym, without anyone hand-building JSON.
@@ -392,16 +394,66 @@ You never see JSON. You never see the word `timed_s`.
 
 ## 5. What to build, in order
 
-| # | Step | Size | Unblocks |
-|---|---|---|---|
-| 1 | Add the endpoint to `api/openapi.yaml` + an `importKey` security scheme | small | **any** function-calling LLM. Also closes the gap the spec's own header calls out. |
-| 2 | `expected_ts` + `409` | small | writing safely while the app exists |
-| 3 | `state_ts` in the `dry_run` response | trivial | step 2 has something to send |
-| 4 | `max_custom_exercises` + `did_you_mean` (via the existing `searchScore`) | medium | the LLM iterating without a human |
-| 5 | `423` on live presence | small | not clobbering a session in progress |
-| 6 | Import lock file | small | concurrent imports |
-| 7 | MCP `import_plan` tool as an HTTP client of the endpoint, opt-in on a key | medium | Claude Desktop / Cursor, same write path |
-| 8 | Push-triggered `pullState()` after an import | large (frontend) | the "app open and idle" hole in §2.3 |
+| # | Step | Size | Unblocks | Status |
+|---|---|---|---|---|
+| 1 | Add the endpoint to `api/openapi.yaml` + an `importKey` security scheme | small | **any** function-calling LLM. Also closes the gap the spec's own header calls out. | **done** |
+| 2 | `expected_ts` + `409` | small | writing safely while the app exists | **done** |
+| 3 | `state_ts` in the response | trivial | step 2 has something to send | **done** |
+| 4 | `max_custom_exercises` + `did_you_mean` (via the existing `searchScore`) | medium | the LLM iterating without a human | *pending, §6* |
+| 5 | `423` on live presence | small | not clobbering a session in progress | *pending, §6* |
+| 6 | Import lock file | small | concurrent imports | *pending, §6* |
+| 7 | MCP `import_plan` tool as an HTTP client of the endpoint, opt-in on a key | medium | Claude Desktop / Cursor, same write path | *pending* |
+| 8 | Push-triggered `pullState()` after an import | large (frontend) | the "app open and idle" hole in §2.3 | *pending* |
 
 Steps 1–3 are the ones that turn "an endpoint a script can call" into "an endpoint an LLM can be
 trusted with". Everything after that is hardening.
+
+---
+
+## 6. Pendiente — no implementado en esta sesión
+
+Deliberately deferred until steps 1–3 have been exercised against a real profile. Written down
+here so it is not confused with what shipped, and not quietly lost.
+
+### 6.1 Import lock file (§2.2 layer 2) — **not implemented**
+
+`DATA_DIR/state-<uid>.import.lock`, `O_EXCL`, 60 s TTL, `409` + `Retry-After` when held.
+
+Why deferred: it only serialises **imports against each other**, and today there is exactly one
+caller — a script run by hand. `expected_ts` already turns two overlapping imports into a
+detectable conflict for any caller that sends it. The lock becomes worth its complexity the day
+an LLM can fire the endpoint on its own schedule.
+
+### 6.2 `423` on live presence (§2.2 layer 3) — **not implemented**
+
+Refuse while `livePresence(uid)` is non-null, unless `force: true`.
+
+Why deferred: it needs the `presence` map to actually have something in it, which means a real
+profile with a workout genuinely on screen. There was no profile on the instance when this was
+written (see the handoff), so the feature could have been coded but not honestly tested. Shipping
+a concurrency guard that has never once fired is how you get a concurrency guard that does not
+work.
+
+### 6.3 `max_custom_exercises` + `did_you_mean` (§3.2) — **not implemented**
+
+`422` with ranked suggestions from the existing `searchScore` when a payload would invent more
+than N custom exercises.
+
+Why deferred: it changes the endpoint from "always writes what you sent" to "sometimes refuses on
+a judgement call", and the threshold is a product decision, not a technical one — the real plan
+legitimately produced 8 customs out of 68 exercises, which any sane default would have blocked.
+It is worth building the moment an LLM is generating payloads unsupervised; it is a nuisance while
+a human is still writing them.
+
+**Note on `api/openapi.yaml`:** none of the above is documented there as a response the endpoint
+can return, precisely because it cannot. The spec's own header calls itself the mirror of
+`api/server.js`; documenting a `422` or a `423` that never arrives would break that promise. They
+go in when they ship.
+
+### 6.4 Nothing in `mcp/` was touched
+
+No file under `mcp/` was read for modification, changed, or duplicated in this work. Its
+read-only tools remain the only path for "ask an LLM about my training"; the HTTP endpoint gained
+no read surface of its own and still answers only about the import it just performed. Step 7 of
+§5, if it is ever built, is explicitly a **client** of the HTTP endpoint rather than a second
+writer over `./data` — see §1.3.

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function parseArgs(argv) {
-  const out = { file: null, url: null, user: null, key: null, dryRun: false, json: false };
+  const out = { file: null, url: null, user: null, key: null, dryRun: false, json: false, expectedTs: undefined };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { const v = argv[++i]; if (v == null) fail(`${a} needs a value`); return v; };
@@ -25,6 +25,13 @@ function parseArgs(argv) {
     else if (a === '--user' || a === '--user-id') out.user = val();
     else if (a === '--key') out.key = val();
     else if (a === '--dry-run') out.dryRun = true;
+    else if (a === '--expected-ts') {
+      const v = val();
+      // `--expected-ts null` is the meaningful "I planned against a profile that has never
+      // synced", not a way of saying "don't check".
+      out.expectedTs = v === 'null' ? null : Number(v);
+      if (out.expectedTs !== null && !Number.isFinite(out.expectedTs)) fail(`--expected-ts wants a number or "null", got ${v}`);
+    }
     else if (a === '--json') out.json = true;
     else if (a === '-h' || a === '--help') { usage(); process.exit(0); }
     else if (a.startsWith('-')) fail(`unknown option ${a}`);
@@ -41,6 +48,9 @@ function usage() {
   --user <id|name>  which profile to import into (default: the only profile on the instance)
   --key <key>       the import key               (default: IMPORT_API_KEY from the environment or .env)
   --dry-run         resolve and report, write nothing
+  --expected-ts <n> refuse (409) unless the profile is still at this state_ts.
+                    Use the state_ts a previous --dry-run printed; "null" for a
+                    profile that has never synced. Omit it to write regardless.
   --json            print the raw response instead of the summary`);
 }
 
@@ -64,6 +74,7 @@ function report(r, dryRun) {
   const c = r.counts || {};
   console.log(`\n${dryRun ? '◦ dry run — nothing was written' : '✓ imported'}  ·  profile ${r.user_id}`);
   if (r.backup) console.log(`  backup      ${r.backup}`);
+  console.log(`  state_ts    ${r.state_ts ?? 'null'}   ${dryRun ? '(unchanged — pass this to --expected-ts)' : '(pass this to --expected-ts next time)'}`);
   console.log(`  routines    ${plural(c.routines_created || 0, 'created', 'created')}, ${c.routines_updated || 0} updated`);
   console.log(`  exercises   ${c.exercises_matched || 0} matched in the catalogue, ` +
     `${c.exercises_custom_created || 0} created as custom, ${c.exercises_custom_reused || 0} custom reused`);
@@ -108,6 +119,8 @@ async function main() {
   const url = new URL(base + '/api/admin/import-plan');
   if (args.user) url.searchParams.set('user_id', args.user);
   if (args.dryRun) url.searchParams.set('dry_run', '1');
+  // Sent in the body rather than the query so `null` survives the trip as a value.
+  if (args.expectedTs !== undefined) payload.expected_ts = args.expectedTs;
 
   console.log(`→ ${url.origin}${url.pathname}  ·  ${path.basename(args.file)}`);
 
@@ -132,6 +145,12 @@ async function main() {
     if (res.status === 501) console.error('✗ 501 — plan import is switched off on this instance.\n  Set IMPORT_API_KEY in .env and restart: docker compose up -d --build api');
     else if (res.status === 401) console.error('✗ 401 — the instance rejected the key. Check IMPORT_API_KEY matches the one the api container was started with.');
     else if (res.status === 429) console.error('✗ 429 — rate limited. Wait for the window to pass and try again.');
+    else if (res.status === 409) {
+      console.error(`✗ 409 — the profile changed since you read it. Nothing was written.`);
+      console.error(`    you expected  ${body.expected_ts ?? 'null'}`);
+      console.error(`    it is now     ${body.actual_ts ?? 'null'}`);
+      console.error(`    Re-run with --dry-run, check what changed, then retry with --expected-ts ${body.actual_ts ?? 'null'}`);
+    }
     else if (res.status === 404 && body.profiles) {
       console.error(`✗ 404 — ${body.error}`);
       body.profiles.forEach(p => console.error(`    ${p.id}  ${p.name}`));
