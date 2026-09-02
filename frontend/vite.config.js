@@ -45,5 +45,13 @@ export default defineConfig({
       '/gif': { target: media, changeOrigin: true }
     }
   },
-  build: { chunkSizeWarningLimit: 1500 }
+  // cssTarget pins how the CSS minifier is allowed to rewrite what it emits. Without it, the
+  // default modern target rewrites `@media (min-width:1000px)` — the app's only desktop
+  // breakpoint — into Media Queries Level 4 range syntax, `@media (width>=1000px)`. A browser
+  // that does not parse that syntax (Safari before 16.4, Chrome before 104) discards the whole
+  // block and renders the desktop layout as the 560px phone one, silently. The breakpoint is
+  // the difference between a 1080px two-column Plan screen and a phone column on a monitor, so
+  // it is not a rule worth losing to a syntax nobody asked for. Costs nothing on a modern
+  // browser: same rules, older spelling.
+  build: { chunkSizeWarningLimit: 1500, cssTarget: ['chrome87', 'safari14', 'firefox78', 'edge88'] }
 })

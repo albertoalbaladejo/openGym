@@ -50,6 +50,59 @@ demo</a> is the real app with example data — no account, nothing to install.</
 
 </div>
 
+## This fork
+
+This repository is a fork of [openGym](https://gitlab.com/DuarteSantos8/opengym) with changes of
+its own. Everything below this section describes upstream openGym and still applies.
+
+### Why it tracks GitLab, not GitHub
+
+openGym's GitHub home (`DuarteSantos8/openGym`) is a **suspended account**. Active development —
+releases, issues, merge requests — happens at **[gitlab.com/DuarteSantos8/opengym](https://gitlab.com/DuarteSantos8/opengym)**
+(mirrored to Gitea). A fork that watched GitHub would sit still forever while the project moved:
+this one was ten releases behind before it was noticed.
+
+So `.github/workflows/sync-upstream.yml` runs every Monday, compares `main` against
+`upstream-gitlab/main`, and — when there is anything new — **opens a pull request** on this fork
+(`sync/upstream-<date>` → `main`) instead of merging.
+
+A PR rather than an automatic merge, on purpose: this fork carries its own code in `api/`, the
+same directory upstream edits most. The workflow dry-runs the merge before opening the PR and puts
+the result in the description — a clean merge says so, and a conflict is **listed by file**, with
+conflicts in this fork's own files called out separately at the top. It never fails silently and
+never resolves anything on your behalf. Run it on demand from the Actions tab.
+
+```bash
+# the same check by hand
+git remote add upstream-gitlab https://gitlab.com/DuarteSantos8/opengym.git
+git fetch upstream-gitlab
+git log --oneline main..upstream-gitlab/main
+```
+
+### What this fork adds
+
+**A plan import API.** `POST /api/admin/import-plan` writes a whole training plan — phases, days,
+exercises, progression policies, deload weeks — into a profile's `state-<uid>.json` from a script,
+so a routine can be generated or updated outside the app and loaded in one call. It is
+authenticated by a service key (`IMPORT_API_KEY`), **inert unless that key is set** (`501`),
+idempotent, and it backs the previous state up before every write.
+
+- **[docs/IMPORT_API.md](docs/IMPORT_API.md)** — the payload format and the endpoint's contract.
+- **[SCHEMA_NOTES.md](SCHEMA_NOTES.md)** — the survey of openGym's real data model this was built
+  against, and what had to be mapped because openGym has no equivalent (phases, deload weeks, a
+  daily block on top of a session).
+- **[scripts/import-plan.mjs](scripts/import-plan.mjs)** — a dependency-free client.
+
+It needs the API image **built from source** (`docker compose up -d --build`): the endpoint reuses
+the app's own exercise catalogue and name matcher out of `frontend/src/lib`, which the prebuilt
+image does not carry.
+
+*Read-only questions about your training are a different tool: upstream's [`mcp/`](mcp/) server
+already lets an LLM client read routines, workouts and 1RMs straight out of `./data`. This
+endpoint is the write path it does not have.*
+
+---
+
 ## Why
 
 Most workout apps lock your data behind a login on their servers, nag you to upgrade, or

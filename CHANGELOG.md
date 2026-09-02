@@ -1,5 +1,63 @@
 # Changelog
 
+## Fork — plan import API (2026-09-02)
+
+*This entry describes changes in [aalbaladejocortes/openGym](https://github.com/aalbaladejocortes/openGym),
+not in upstream openGym. Everything below sits on top of upstream `v1.2.14`.*
+
+### A plan can be loaded over HTTP, not only typed into the UI
+
+- **`POST /api/admin/import-plan`** writes a whole training plan — phases, days, exercises,
+  progression policies, deload weeks — into one profile's `state-<uid>.json`. Authenticated by
+  an `X-Import-Key` header against a new `IMPORT_API_KEY`, because the caller is a script and a
+  script has no passkey and no cookie jar. Documented in **`docs/IMPORT_API.md`**.
+- **Off by default, and off means inert.** With `IMPORT_API_KEY` unset the route answers `501`
+  and does nothing — an unconfigured instance does not get a half-open write path into somebody's
+  training plan. A wrong key is `401`, compared in constant time, logged as `import.denied`
+  without the key. Rate limited per peer (`IMPORT_RATE_MAX` / `IMPORT_RATE_WINDOW_S`), in memory,
+  no new dependency.
+- **Idempotent.** Routines are upserted by name and keep their id, so the weekly schedule and any
+  workout already logged against them stay attached. Importing the same plan twice leaves the
+  state byte-identical. Custom exercises are reused by name + body part rather than duplicated.
+- **Backed up before every write** to `state-<uid>.json.bak-<timestamp>`, next to the original.
+- **Nothing else is touched.** Not `db.json`, not the WebAuthn flow, not logged workouts, weigh-ins
+  or settings, and not routines you made yourself.
+
+### Exercise names, including Spanish ones, resolved against the real catalogue
+
+- Resolution reuses `matchExercise()` from `frontend/src/lib/import-csv.js` — the same matcher the
+  CSV importer uses — after stripping accents, case, parenthesised notes (`(postural)`,
+  `(pec deck)`) and an `" o <alternativa>"` tail.
+- The dataset is English-only and openGym's translated exercise names cover pt-BR and Hungarian,
+  not Spanish, so `api/exercise-aliases.js` adds a curated Spanish → English phrase table (or a
+  direct id where the dataset's own wording is unguessable — a pec deck is a "lever seated fly").
+- Anything still unresolved becomes a **custom exercise** with an inferred body part, instead of
+  being dropped. An unresolved name never aborts the rest of the import; it is reported back.
+
+### The plan concepts openGym does not have, mapped rather than invented
+
+- **Phases** become flat routines named `F2 · Torso A`; only `active_phase` fills the weekly
+  schedule, because openGym resolves exactly one routine per calendar day.
+- **Deload weeks** become twin routines with `excludeFromProgression: true` and reduced sets —
+  the mechanism the app already has — scheduled into `dayPlan` when `start_date` is given.
+- **A daily postural block** is appended to every training routine *and* published as a standalone
+  routine on the days the active phase leaves empty, because there is no "session plus mobility"
+  and no "rest day with light work".
+- Reasoning and the full schema survey are in **`SCHEMA_NOTES.md`**.
+
+### Also
+
+- `scripts/import-plan.mjs` — a dependency-free client: reads a plan file, posts it, prints the
+  summary. Key from `--key`, the environment, or `.env`; never printed.
+- The `api` image now builds from the repository root so it can `COPY frontend/src/lib`, and
+  imports those pure modules as Node ESM — the same approach `mcp/` takes. `docker compose up -d
+  --build` is required; the prebuilt `registry.gitlab.com` image does not carry the endpoint.
+- 25 new tests (`api/import-match.test.js`, `api/import-plan.test.js`, `api/import-auth.test.js`)
+  covering name matching, idempotency, and the 501 / 401 / 429 / 404 guards over real HTTP.
+- `.env.example` and `docs/SELF_HOSTING.md` document `IMPORT_API_KEY` and warn, in both places,
+  that it grants full write access to the plan of any profile on the instance.
+
+
 ## v1.2.14 — 2026-08-30
 
 The largest community release so far: twenty merge requests from ten contributors, read and

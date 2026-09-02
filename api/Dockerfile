@@ -15,16 +15,24 @@ LABEL maintainer="Duarte Santos https://gitlab.com/DuarteSantos8" \
     org.opencontainers.image.revision=$VCS_REF \
     org.opencontainers.image.created=$BUILD_DATE
 
+# Build context is the REPOSITORY ROOT, not ./api (see docker-compose.yml).
+# The import endpoint reuses the app's own training logic — the exercise catalogue, the
+# name matcher and normalizeRepRange — by importing frontend/src/lib as plain Node ESM,
+# the same way mcp/ does. Reimplementing those rules in the API would give two sources of
+# truth for what a plan means. Nothing under frontend/src/lib that the API touches is
+# Vite-specific, and it pulls in no dependencies of its own.
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev && npm cache clean --force
-COPY server.js push-messages.js verify-error.js ./
+COPY api/package.json api/package-lock.json* ./api/
+RUN cd api && npm install --omit=dev && npm cache clean --force
+COPY api/server.js api/push-messages.js api/verify-error.js ./api/
+COPY api/import-plan.js api/exercise-resolve.js api/exercise-aliases.js ./api/
+COPY frontend/src/lib ./frontend/src/lib
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "api/server.js"]
 
 HEALTHCHECK --interval=5m \
             --timeout=5s \

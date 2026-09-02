@@ -36,7 +36,13 @@ services:
   # image: prebuilt (docker compose pull). build: from source (docker compose up --build).
   api:
     image: registry.gitlab.com/duartesantos8/opengym/api:latest
-    build: ./api
+    # Context is the repo root so the API can COPY frontend/src/lib — the import endpoint
+    # reuses the app's own exercise catalogue and matcher instead of duplicating them.
+    # This build is required for POST /api/admin/import-plan; the prebuilt image above does
+    # not carry it. Always bring the stack up with `docker compose up -d --build`.
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:
