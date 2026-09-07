@@ -1095,15 +1095,37 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ImportConflict' }
         '429':
-          description: Rate limited. `Retry-After` says for how long.
+          description: |
+            Rate limited. Two separate fixed windows, keyed differently on purpose:
+
+            - **an authenticated import** is charged to the **profile** it writes, so one
+              profile's imports can never exhaust another's. The body carries `user_id`.
+            - **a rejected key** is charged to the **peer address**, the only thing known before
+              a caller is identified. Filling that bucket therefore blocks further wrong keys and
+              never a legitimate import.
+
+            Both use `IMPORT_RATE_MAX` per `IMPORT_RATE_WINDOW_S`. `Retry-After` says for how long.
           headers:
             Retry-After:
               schema: { type: integer }
               description: Seconds until the window resets.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-              example: { error: "too many import requests" }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Error'
+                  - type: object
+                    properties:
+                      user_id:
+                        type: string
+                        description: Present only on the per-profile limit.
+              examples:
+                perProfile:
+                  summary: The profile's own quota is spent
+                  value: { error: "too many import requests for this profile", user_id: "Zk3q9XyPbA2LmN0v" }
+                wrongKeys:
+                  summary: Too many rejected keys from this address
+                  value: { error: "too many rejected import keys from this address" }
         '501':
           description: >-
             `IMPORT_API_KEY` is not set on this instance, so the endpoint is inert.

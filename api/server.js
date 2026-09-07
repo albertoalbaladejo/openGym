@@ -540,22 +540,41 @@ if (AUDIT_ON) {
 
 /* ---------- plan import: service auth, rate limit, backup ---------- */
 
-// Fixed window per peer, in memory. Same shape as the presence and challenge maps above: no
-// new dependency, and nothing that survives a restart (a restart is not a way past it — the
-// key is still the key). The address is a bucket label only; it is never written anywhere.
-const importHits = new Map();                 // peer -> { n, reset }
-setInterval(() => { const now = Date.now(); for (const [k, v] of importHits) if (v.reset < now) importHits.delete(k); }, 60000).unref();
+// Two fixed windows, in memory, same shape as the presence and challenge maps above: no new
+// dependency, nothing that survives a restart (a restart is not a way past either — the key is
+// still the key, and the profile is still the profile).
+//
+// They are keyed differently on purpose. The first version keyed everything on
+// req.socket.remoteAddress, which behind the bundled web container is the SAME address for every
+// caller on the internet — one bucket for the whole instance. With one user that was invisible;
+// with two it means one person's import can 429 the other's. So:
+//
+//   · authenticated imports  → keyed by PROFILE. Your imports are your own quota, and no other
+//     user can spend it. This is the limit that protects the read-modify-write of state-<uid>.
+//   · rejected keys          → keyed by peer address. It is the only thing available before a
+//     caller is identified, and it is the right key anyway: this bucket exists to slow a wrong
+//     key being tried repeatedly, which is a property of the source, not of any profile. A
+//     hostile caller filling it therefore blocks other WRONG keys, never a legitimate import.
+const importHits = new Map();                 // uid  -> { n, reset }   authenticated imports
+const importAuthFails = new Map();            // peer -> { n, reset }   rejected keys
+setInterval(() => {
+  const now = Date.now();
+  for (const m of [importHits, importAuthFails]) for (const [k, v] of m) if (v.reset < now) m.delete(k);
+}, 60000).unref();
 const peerKey = req => req.socket?.remoteAddress || 'unknown';
 
-function importRateOk(req) {
+/** Fixed window over one bucket. Returns { ok } or { ok:false, retryAfter } in whole seconds. */
+function bump(map, key) {
   const now = Date.now();
-  const k = peerKey(req);
-  const cur = importHits.get(k);
-  if (!cur || cur.reset < now) { importHits.set(k, { n: 1, reset: now + IMPORT_RATE_WINDOW_MS }); return { ok: true }; }
+  const cur = map.get(key);
+  if (!cur || cur.reset < now) { map.set(key, { n: 1, reset: now + IMPORT_RATE_WINDOW_MS }); return { ok: true }; }
   cur.n++;
   if (cur.n > IMPORT_RATE_MAX) return { ok: false, retryAfter: Math.ceil((cur.reset - now) / 1000) };
   return { ok: true };
 }
+
+/** The quota an authenticated import spends. Charged to the profile being written. */
+const importRateOk = uid => bump(importHits, 'uid:' + uid);
 
 // Constant-time, and length-safe: timingSafeEqual throws on a length mismatch, which would
 // otherwise leak the key's length through a 500 instead of a 401.
@@ -566,15 +585,18 @@ function keyMatches(given) {
   return crypto.timingSafeEqual(a, b);
 }
 
-/** 501 when the feature was never configured, 429 when hammered, 401 on a wrong key. */
+/** 501 when the feature was never configured, 401 on a wrong key, 429 on repeated wrong keys.
+ *  The per-profile quota is charged later, once the caller has said which profile they mean. */
 function requireImportKey(req, res) {
   if (!IMPORT_API_KEY) {
     json(res, 501, { error: 'plan import is not enabled on this instance', hint: 'set IMPORT_API_KEY in .env and restart the api container' });
     return false;
   }
-  const rate = importRateOk(req);
-  if (!rate.ok) { json(res, 429, { error: 'too many import requests' }, { 'Retry-After': String(rate.retryAfter) }); return false; }
   if (!keyMatches(req.headers['x-import-key'])) {
+    // Only a rejected key is charged to the address — a good one costs this bucket nothing, so
+    // an attacker exhausting it cannot deny anybody a legitimate import.
+    const rate = bump(importAuthFails, 'peer:' + peerKey(req));
+    if (!rate.ok) { json(res, 429, { error: 'too many rejected import keys from this address' }, { 'Retry-After': String(rate.retryAfter) }); return false; }
     // Audited without the key, obviously, and without a body: this route is reachable by
     // anyone who can see the port, and the operator wants to know it was knocked on.
     audit(req, 'import.denied', { ok: false, msg: 'bad or missing X-Import-Key' });
@@ -1051,6 +1073,16 @@ const routes = {
         error: asked ? `no profile with id or name "${asked}"` : 'this instance has ' + db.users.length + ' profiles — pass user_id',
         profiles: db.users.map(u => ({ id: u.id, name: u.name }))
       });
+    }
+
+    // The quota is charged here, not in requireImportKey, because only now is it known WHOSE
+    // quota it is. One profile hammering the endpoint cannot take another profile's imports
+    // down with it — which is exactly what the old peer-keyed limiter did, since behind the web
+    // container every caller shares one address.
+    const rate = importRateOk(user.id);
+    if (!rate.ok) {
+      return json(res, 429, { error: 'too many import requests for this profile', user_id: user.id },
+        { 'Retry-After': String(rate.retryAfter) });
     }
 
     const dry = /^(1|true|yes|on)$/i.test(String(q.get('dry_run') || body.dry_run || ''));

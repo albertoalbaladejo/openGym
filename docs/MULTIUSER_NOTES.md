@@ -162,7 +162,21 @@ también dice quién lo intentó sin código.
 Lo que **no** existe y habría que construir: límite de nº de perfiles, aprobación manual
 (alta pendiente hasta que la apruebas), y caducidad de los códigos de invitación.
 
-### 2.3 🔴 El *rate limit* del import es **global**, no por usuario
+### 2.3 ✅ RESUELTO (2026-09-07) — El *rate limit* ya es por perfil
+
+> **Estado: arreglado.** El contador de imports autenticados se cobra ahora al **perfil**
+> (`uid:<user_id>`), no a la dirección del socket. Las claves rechazadas conservan un cubo propio
+> por dirección, que es donde esa clave sí es la correcta. Una clave buena no gasta ese cubo, así
+> que llenarlo bloquea más claves malas y nunca un import legítimo.
+>
+> Repetida la medición de abajo con el fix: Ana agota su cupo (`200 200 200 429 429`), Bruno pasa
+> en la misma ventana y desde el mismo origen (`200`, antes `429`), y un import legítimo tras
+> llenar el cubo de claves malas también pasa (`200`, antes `429`). Verificado además en
+> producción sin tocar el plan real. Tests 54 → 56. Detalle en `HANDOFF-CLAUDE-CODE.md` §14.2.
+>
+> Lo de abajo es la medición original, que se conserva porque explica **por qué** se cambió.
+
+#### La medición original
 
 Esto no es teórico: se midió. Con `IMPORT_RATE_MAX=4`:
 
@@ -290,7 +304,7 @@ sólo requiere `.env`.
 | **Ver los perfiles** | ✅ **HECHO** — panel activo | ✅ hecho | ✅ hecho |
 | **Importar planes** | el endpoint tal cual, con `--user`. **Ya funciona** | igual | **clave por usuario** (`data/tokens.json` + acuñado desde el panel) |
 | **`IMPORT_API_KEY`** | única global, correcta | única global, correcta | por usuario, `user_id` deducido del token |
-| **Rate limit** | sirve como está | **arreglar §2.3** (clavar el contador al `uid`, no al socket) | **imprescindible arreglarlo** |
+| **Rate limit** | ✅ **HECHO** (2026-09-07) — por perfil | ✅ hecho | ✅ hecho |
 | **Alias en español** | ampliar según los objetivos que aparezcan (§3) | ampliar, y además dar al LLM `max_custom_exercises` + `did_you_mean` (`LLM_INTEGRATION.md` §6.3) | igual que B |
 | **Cuestionario / generación** | ninguno: lo haces tú | **todo por construir** — es la decisión de producto que queda | igual que B, más UI |
 | **Aviso de alta nueva** | mirar el panel de vez en cuando | ídem, o construir un push al admin | push al admin recomendado |
@@ -303,10 +317,13 @@ sólo requiere `.env`.
 activo con `ADMIN_UIDS`, modo invitado retirado con `ALLOW_GUEST=0`. Cero código nuevo. La cuenta
 y el plan existentes, intactos.
 
-**Sigue abierto, a la espera de que decidas el flujo de alta** (manual / semi-automático /
-autoservicio) — es el resto de la tabla de arriba:
+**Hecho también el 2026-09-07:** el *rate limit* pasa a ser por perfil (§2.3), y una auditoría con
+`gitleaks` sobre los 369 commits del remoto encontró y cerró una segunda fuga —el `data/secret` de
+producción publicado en `SCHEMA_NOTES.md`— rotada y verificada (`HANDOFF` §14.1).
 
-* el *rate limit* global por IP de contenedor (§2.3) — no urge mientras seas el único que importa;
+**Sigue abierto, a la espera de que decidas el flujo de alta** (manual / semi-automático /
+autoservicio):
+
 * la clave de importación única (§2.4) — correcta mientras importes tú para todos;
 * la IP real en el log de actividad (§2.5);
 * la tabla de alias en español para objetivos distintos de la fuerza (§3);

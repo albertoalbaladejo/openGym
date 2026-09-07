@@ -13,10 +13,10 @@ const KEY = 'test-import-key-0123456789abcdef';
 const UID = 'testuid1';
 
 /** Boot an api on an ephemeral port over a throwaway DATA_DIR. */
-async function startServer(env = {}) {
+async function startServer(env = {}, users = [{ id: UID, name: 'Test' }]) {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'opengym-test-'));
   fs.writeFileSync(path.join(data, 'db.json'), JSON.stringify({
-    users: [{ id: UID, name: 'Test', created: '2026-01-01T00:00:00.000Z' }], creds: [], subs: [], invites: []
+    users: users.map(u => ({ created: '2026-01-01T00:00:00.000Z', ...u })), creds: [], subs: [], invites: []
   }));
   const port = 20000 + Math.floor(Math.random() * 20000);
   const child = spawn(process.execPath, [path.join(HERE, 'server.js')], {
@@ -106,15 +106,51 @@ test('an unknown profile is 404 with the list, never a write to the wrong one', 
   } finally { s.stop(); }
 });
 
-test('the endpoint is rate limited', async () => {
+test('repeated wrong keys are throttled by address', async () => {
   const s = await startServer({ IMPORT_API_KEY: KEY, IMPORT_RATE_MAX: '3', IMPORT_RATE_WINDOW_S: '60' });
   try {
     const codes = [];
     for (let i = 0; i < 5; i++) codes.push((await s.post(MINIMAL, { 'X-Import-Key': 'wrong' })).status);
     assert.deepEqual(codes.slice(0, 3), [401, 401, 401]);
     assert.deepEqual(codes.slice(3), [429, 429]);
-    // The limit is on the route, not on the credential — a valid key is throttled too.
-    assert.equal((await s.post(MINIMAL, { 'X-Import-Key': KEY })).status, 429);
+    // …and a good key is NOT charged to that bucket, so exhausting it cannot deny a real import.
+    assert.equal((await s.post(MINIMAL, { 'X-Import-Key': KEY })).status, 200,
+      'a legitimate import still gets through after the wrong-key bucket is full');
+  } finally { s.stop(); }
+});
+
+test('the import quota is per profile — one user cannot spend another\'s', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY, IMPORT_RATE_MAX: '2', IMPORT_RATE_WINDOW_S: '60' }, [
+    { id: 'userA', name: 'Ana' }, { id: 'userB', name: 'Bruno' },
+  ]);
+  try {
+    // Ana burns her whole window.
+    const ana = [];
+    for (let i = 0; i < 4; i++) ana.push((await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?user_id=userA')).status);
+    assert.deepEqual(ana, [200, 200, 429, 429], 'Ana is throttled on her own quota');
+
+    // Bruno, in the same window, from the same address, is untouched.
+    const bruno = await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?user_id=userB');
+    assert.equal(bruno.status, 200, "Bruno's import must not be blocked by Ana's");
+    assert.equal((await bruno.json()).user_id, 'userB');
+
+    // …and Bruno has his own limit, which he can reach without touching Ana's.
+    assert.equal((await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?user_id=userB')).status, 200);
+    assert.equal((await s.post(MINIMAL, { 'X-Import-Key': KEY }, '?user_id=userB')).status, 429);
+  } finally { s.stop(); }
+});
+
+test('a 429 for one profile names that profile, and writes nothing', async () => {
+  const s = await startServer({ IMPORT_API_KEY: KEY, IMPORT_RATE_MAX: '1', IMPORT_RATE_WINDOW_S: '60' });
+  try {
+    assert.equal((await s.post(MINIMAL, { 'X-Import-Key': KEY })).status, 200);
+    const before = fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8');
+    const res = await s.post(MINIMAL, { 'X-Import-Key': KEY });
+    assert.equal(res.status, 429);
+    const body = await res.json();
+    assert.equal(body.user_id, UID);
+    assert.match(res.headers.get('retry-after'), /^\d+$/);
+    assert.equal(fs.readFileSync(path.join(s.data, `state-${UID}.json`), 'utf8'), before);
   } finally { s.stop(); }
 });
 

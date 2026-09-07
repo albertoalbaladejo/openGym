@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 9 — registro cerrado + panel de admin. Incidente del `.env` (§13): clave rotada, y decidido no purgar la historia. Nada abierto.**
+Última actualización: **2026-09-07, sesión 10 — auditoría de secretos (segunda fuga encontrada y rotada, §14.1), rate limit por perfil (§14.2), y el procedimiento de alta listo para la primera persona real (§14.3).**
 
 ---
 
@@ -1074,3 +1074,211 @@ explícita para `.env.example`.
 La nueva `IMPORT_API_KEY` ya está en `/home/ubuntu/opengym/.env`. `scripts/import-plan.mjs` la lee
 de ahí, así que **los comandos documentados siguen funcionando sin cambios**. Si tenías la
 anterior apuntada en algún sitio, bórrala: no sirve.
+
+---
+
+## 14. Sesión 10 — auditoría de secretos, rate limit por perfil, alta de personas reales
+
+### 14.1 Auditoría de secretos — **apareció una segunda fuga, peor que la primera**
+
+Herramienta real, no revisión a ojo: **gitleaks 8.21.2** (binario suelto en el scratchpad, no
+instalado en el sistema) sobre **los 369 commits alcanzables desde `origin/main`**.
+
+```
+INF 369 commits scanned.
+WRN leaks found: 2
+  generic-api-key | .env.bak-20260907T074425Z | commit 846764b   ← el ya conocido, clave ya rotada
+  generic-api-key | SCHEMA_NOTES.md           | commit 7c67519   ← NUEVO
+```
+
+#### El hallazgo nuevo: publiqué tu `data/secret`
+
+`SCHEMA_NOTES.md`, línea 475, desde el commit `7c67519`. Para demostrar que los secretos de
+producción eran distintos de los que el fork padre había comiteado, **pegué los dos valores
+enteros** — incluido `data/secret`, la clave HMAC con la que se firman las cookies de sesión.
+
+**Confirmado explotable antes de rotar.** Forjé una cookie con el valor publicado:
+
+```
+GET /api/me            → {"user":{"id":"3TR-nhgjg3tPyw4R","name":"Alberto","admin":true}}
+GET /api/admin/users   → HTTP 200
+```
+
+Acceso total a la cuenta y al panel de administración **sin passkey**. Es más grave que la fuga
+del `IMPORT_API_KEY`: aquella daba escritura sobre planes, ésta daba la identidad entera.
+
+**Rotado y verificado**, en este orden:
+
+1. Copia del secreto viejo **fuera del árbol del repo**:
+   `/home/ubuntu/opengym-secret-comprometido-20260907T080721Z.bak` (`600`).
+2. `openssl rand -hex 32` → `data/secret` (`600 root:root`, 64 bytes).
+3. `docker compose restart api` — hizo falta el `restart` explícito: `up -d` no vio cambios de
+   env y dejó el contenedor con el secreto viejo en memoria. Se detectó porque la cookie forjada
+   seguía funcionando.
+4. Misma cookie forjada, después: **`401 {"error":"not signed in"}`**, y `/api/admin/users` → `401`.
+
+**Efecto secundario que te toca a ti:** rotar ese fichero invalida **todas** las sesiones. Tendrás
+que **volver a entrar con tu passkey** en el móvil, y **volver a emparejar** la app si usabas el
+token de emparejamiento. Tu perfil, tus credenciales y tu plan no se tocaron.
+
+El párrafo de `SCHEMA_NOTES.md` conserva lo que quería demostrar y pierde el valor.
+
+#### El resto de la auditoría: limpio
+
+| Comprobación | Resultado |
+|---|---|
+| Ficheros con pinta de secreto que hayan existido **alguna vez** en cualquier rama | 5: los 2 anteriores, `data/secret` y `api/test/credential.test.js` y `frontend/src/lib/coach-secrets.js` |
+| …¿alcanzables desde `origin/main`? | **Sólo el `.env.bak`.** `data/secret` vive únicamente en `3efe375`, de la rama local `backup/pre-sync-v1.2.4` que nunca se empujó. Los otros dos son commits **de upstream GitLab** (feature "Coach") que están en el remoto `upstream-gitlab`, no en tu fork |
+| Árbol del remoto (`origin/main`, 383 ficheros) buscando `.bak/.old/.local/.orig/.pem/.key/~` | sólo `.env.example`, que debe estar |
+| `gitleaks` sobre el árbol de trabajo actual | 1 hallazgo: el `.env` real, correctamente gitignorado. Es donde tiene que estar |
+| Ficheros sueltos con secretos en la VPS | `.env` (`600`), `data/secret` y `data/vapid.json` (`600 root`). Los `state-*.json.bak/manual` son `644` pero contienen planes, no secretos |
+| ¿nginx sirve alguno por error? | **No.** `/.env`, `/data/secret` y `/.git/config` devuelven `200` porque el SPA hace fallback a `index.html` — verificado byte a byte: el md5 es idéntico al de la portada. El contenedor `web` sólo monta `media/img` y `media/gif` |
+
+#### El `.gitignore`, ampliado más allá de `.env.*`
+
+```
+.env
+.env.*
+env.*
+!.env.example
+*.bak      *.bak-*     *.old     *.orig     *secret*
+!frontend/src/lib/coach-secrets.js
+```
+
+Probado con 7 nombres (`env.backup`, `config.bak`, `data.old`, `secrets.json`,
+`my-secret.txt`, `.env.example`, un fichero normal) y verificado que **ningún fichero ya
+trackeado se vuelve ignorado**.
+
+#### Estado de las dos claves, con petición real
+
+```
+IMPORT_API_KEY filtrada → 401     IMPORT_API_KEY actual → 400 (autentica; el 400 es del payload vacío)
+cookie forjada con el data/secret publicado → 401
+```
+
+#### Otros proyectos — sólo reporte, no se tocó nada
+
+| Proyecto | Hallazgo |
+|---|---|
+| `repos/rentacarfurgo` | `.env.local` correctamente **ignorado**. `gitleaks` sobre 1567 commits: **no leaks found** ✔ |
+| `repos/espacio-huerto` | sin backups de `.env`. `gitleaks` sobre 274 commits: **no leaks found** ✔ (`db/migrations/env.py` es Alembic, no un fichero de entorno) |
+| `zammad-docker/.env.dist` | trackeado, pero es la **plantilla oficial de Zammad** en un clon de su propio repo, con todo comentado. Sin riesgo |
+| `ktor-app/.env.backup` | `600`, y **la carpeta no es un repo git**. Sólo local |
+| `supabase/.env.old` | **la carpeta no es un repo git**, pero está en `664` — legible por cualquier usuario local de la VPS. Si contiene claves de servicio de Supabase, valdría la pena `chmod 600`. **No lo he tocado** |
+
+### 14.2 Rate limit: ahora por perfil
+
+**El problema, medido en la sesión anterior:** el contador usaba `req.socket.remoteAddress`, que
+detrás del contenedor `web` es `192.168.112.2` **para todo internet**. Un solo cubo para la
+instancia entera.
+
+**El arreglo:** dos ventanas fijas con claves distintas, y a propósito.
+
+| Qué | Clave | Por qué |
+|---|---|---|
+| Un import **autenticado** | el **perfil** que escribe (`uid:<user_id>`) | Tu cupo es tuyo. Nadie más puede gastarlo, y tú no puedes gastar el suyo |
+| Una **clave rechazada** | la **dirección de origen** (`peer:<ip>`) | Es lo único que se conoce antes de identificar al llamante, y es la clave correcta: probar una clave mala repetidamente es una propiedad del origen. Una clave buena **no** se cobra a este cubo, así que llenarlo bloquea más claves malas y nunca un import legítimo |
+
+El cobro por perfil ocurre **dentro de la ruta**, después de resolver el `user_id`, porque hasta
+ahí no se sabe de quién es el cupo.
+
+**La misma medición que destapó el fallo, repetida con el fix** (`IMPORT_RATE_MAX=3`):
+
+```
+5 imports legítimos de Ana                     → 200 200 200 429 429   (agota SU cupo)
+1 import de Bruno, mismo origen, misma ventana → 200                   (antes: 429)
+5 peticiones con clave mala                    → 401 401 401 429 429   (cubo aparte)
+1 import legítimo tras llenar el cubo de malas → 200                   (antes: 429)
+```
+
+**Verificado también en producción**, sin tocar tu plan (con `dry_run=1`):
+
+```
+12 peticiones con clave mala → 401 ×10, luego 429 ×2      ← el cubo por IP hace su trabajo
+import legítimo (dry-run) con ese cubo lleno → HTTP 200   ← antes habría sido 429
+tu plan después: 23 rutinas, 32 dayPlan, _ts 1788563782039 (sin cambios)
+```
+
+**Tests: 54 → 56.** Los nuevos: el cupo por perfil (Ana agota, Bruno pasa, Bruno agota el suyo),
+y que un `429` por perfil nombra el perfil, devuelve `Retry-After` y no escribe nada. Documentado
+en `docs/IMPORT_API.md` §1 y en `api/openapi.yaml` (con dos ejemplos de `429`, uno por cubo).
+
+### 14.3 Procedimiento de alta de una persona real — paso a paso
+
+Probado entero. **Nada de esto está automatizado ni hace falta que lo esté.**
+
+#### A. Darle de alta
+
+1. **Genera el código** desde el panel: en el móvil, **Ajustes → Admin dashboard → invitaciones →
+   generar**, con una nota para acordarte de para quién es. Sale un código de 16 caracteres hex.
+   *(Equivale a `POST /api/admin/invites/new` con tu sesión.)*
+2. **Pásale dos cosas**: la URL `https://gym.albertoalbaladejo.com` y el código.
+3. **Ella, en su móvil**: abrir la URL en **Safari o Chrome de verdad** — no en el navegador
+   embebido de WhatsApp/Instagram/Telegram, que no ejecuta ceremonias WebAuthn y hace que el
+   botón parezca muerto. Luego **Create profile** → su nombre → **pegar el código** → aceptar
+   Face ID / huella / PIN.
+4. **Confirma tú que entró**: Admin dashboard → la lista. Debe aparecer su fila, y la columna
+   `invitedBy` con **el código que le diste** — así sabes que es ella y no otra persona con la URL.
+   Su código queda marcado como usado y **no sirve para un segundo alta** (verificado: `403`).
+
+Si algo falla, el propio panel te lo dice: un intento sin código válido queda en el audit log como
+`auth.register.denied` / `invite-rejected`.
+
+#### B. Importar su plan
+
+1. **Su `user_id`**: la columna `id` de su fila en el panel. También `sudo cat data/db.json`.
+2. **Dry-run primero**, siempre, y apuntando a ella con `--user`:
+   ```bash
+   cd /home/ubuntu/opengym
+   node scripts/import-plan.mjs plans/plan-<ella>.json \
+        --url https://gym.albertoalbaladejo.com --user <su-uid> --dry-run
+   ```
+   Mira tres cosas en la salida: **`profile <su-uid>`** (que no es el tuyo), el **`state_ts`**, y
+   los **ejercicios creados como custom** — si son muchos, probablemente falten alias en español
+   (`docs/MULTIUSER_NOTES.md` §3) y merece la pena arreglarlo antes que después.
+3. **El import real**, encadenando el `state_ts` del dry-run:
+   ```bash
+   node scripts/import-plan.mjs plans/plan-<ella>.json \
+        --url https://gym.albertoalbaladejo.com --user <su-uid> --expected-ts <state_ts>
+   ```
+   Si contesta `409`, es que ella tocó la app entre medias: repite el dry-run y usa el
+   `actual_ts` que te dice el error.
+4. **Que lo tenga cerrado mientras importas** — el móvil y el import escriben el mismo fichero y
+   gana el último. `expected_ts` lo detecta, pero es más simple no provocarlo.
+5. **Verificación**: en el panel, su fila muestra `lastSync`. Y pídele a ella que abra **Plan** y
+   confirme que están las rutinas con los nombres esperados. Tu perfil no se toca en ningún paso:
+   el `--user` decide el fichero, y está probado que un import a un perfil deja el de otro
+   byte-idéntico.
+
+**Tu `IMPORT_API_KEY` no se le da a nadie.** Los planes los importas tú, para todos.
+
+### 14.4 Aislamiento con tres perfiles — probado, no supuesto
+
+Instancia aislada, `INVITE_ONLY=1`, ciclo completo con ceremonia WebAuthn real para cada uno
+(Ana se registró antes de cerrar el alta, como tú; Bruno y Carla con código de invitación), y tres
+planes **distintos**: fuerza 24 semanas, resistencia 12 semanas, y movilidad/core.
+
+```
+ana    pSaZRaJE8tp3zl3z   rutinas 23  customEx 8  dayPlan 32
+bruno  1C_1CGWEjQw9e4x8   rutinas 6   customEx 6  dayPlan 0
+carla  YqumVAXv3jj5nljJ   rutinas 1   customEx 2  dayPlan 0
+
+ana vs bruno / ana vs carla / bruno vs carla:
+  ids de custom compartidos: ninguno · ids de rutina compartidos: ninguno · nombres en común: ninguno
+¿alguna rutina apunta a un custom de otro perfil? no, en ninguno de los tres
+"Plancha frontal" existe en los TRES perfiles → con tres ids distintos
+```
+
+La instancia y sus tres perfiles se borraron al terminar. **En producción sigue habiendo un solo
+usuario, y su plan intacto** (23 rutinas, `_ts 1788563782039`).
+
+### 14.5 Lo que sigue diferido, a propósito
+
+Ninguna es un riesgo abierto hoy; todas dependen del flujo que decidas. Detalle en
+`docs/MULTIUSER_NOTES.md`:
+
+* **Clave de importación por usuario** (§2.4) — la única global es correcta mientras importes tú.
+* **IP real en el log de actividad** (§2.5) — el contenedor `web` sobrescribe `X-Forwarded-For`.
+* **Alias en español para otros objetivos** (§3) — se amplía cuando aparezca el primer plan real
+  que lo necesite, no antes.
+* **Generador de planes / cuestionario** — decisión de producto.

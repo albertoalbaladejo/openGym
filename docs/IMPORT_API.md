@@ -36,8 +36,20 @@ docker compose up -d --build
 | Env var | Default | What it does |
 |---|---|---|
 | `IMPORT_API_KEY` | *(unset)* | The service credential. **Unset ⇒ the endpoint answers 501 and does nothing.** |
-| `IMPORT_RATE_MAX` | `10` | Requests allowed per window, per peer address. |
+| `IMPORT_RATE_MAX` | `10` | Requests allowed per window, per bucket (see below). |
 | `IMPORT_RATE_WINDOW_S` | `300` | The window, in seconds. |
+
+**Two rate-limit buckets, keyed differently on purpose.**
+
+| What | Keyed by | Why |
+|---|---|---|
+| An authenticated import | the **profile** it writes | Your quota is yours. Another user cannot spend it, and you cannot spend theirs. |
+| A rejected key | the **peer address** | It is the only thing known before a caller is identified — and the right key anyway, since trying a wrong key repeatedly is a property of the source. A good key is never charged to it, so filling it blocks further wrong keys and never a legitimate import. |
+
+The first version keyed both on the peer address. Behind the bundled `web` container that is the
+**same address for every caller on the internet** — one bucket for the whole instance — so one
+person's imports could `429` another's. With a single user it was invisible; with two it is a
+bug. The per-profile `429` names the profile in its body (`user_id`).
 
 ## 2. Calling it
 
@@ -62,7 +74,7 @@ Responses:
 | `401` | `X-Import-Key` missing or wrong. |
 | `404` | No such profile. The body lists the profiles that do exist. |
 | `409` | `expected_ts` was sent and the profile has moved since. Nothing was written — see §2.1. |
-| `429` | Rate limited. `Retry-After` says how long. |
+| `429` | Rate limited — see below. `Retry-After` says how long. |
 | `501` | `IMPORT_API_KEY` is not set on this instance. |
 
 There is a machine-readable version of all of this in
