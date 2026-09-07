@@ -325,6 +325,11 @@ producción publicado en `SCHEMA_NOTES.md`— rotada y verificada (`HANDOFF` §1
 autoservicio):
 
 * la clave de importación única (§2.4) — correcta mientras importes tú para todos;
+* **borrar historial sin borrar el plan** — no existe: el endpoint no toca `workouts`,
+  `bodyweight` ni `exWeights` (por diseño, con test), y el único botón de la app es
+  *«Restablecer todo»*, que se lleva también las rutinas. Hasta ahora se ha resuelto editando el
+  `state-<uid>.json` a mano (`HANDOFF` §18). Con varias personas usando la instancia, esto pide
+  un `reset_history` en el endpoint o un botón intermedio en Ajustes;
 * la IP real en el log de actividad (§2.5);
 * la tabla de alias en español para objetivos distintos de la fuerza (§3);
 * y el generador de planes en sí, que es la decisión de producto de fondo.

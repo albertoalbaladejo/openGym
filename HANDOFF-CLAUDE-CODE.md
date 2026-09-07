@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 13 — el plan de Isi queda 100% máquinas, sin excepciones: el core de suelo se sustituye por máquina de abdominales (§17).**
+Última actualización: **2026-09-07, sesión 14 — historial de Isi puesto a cero (§18). Su plan intacto; tiene que cerrar y reabrir la app.**
 
 ---
 
@@ -1598,3 +1598,78 @@ Tres pruebas de que fue su propia app y no el import:
    sincronización de la app, que no pasa por el endpoint ni queda auditada.
 
 **Su plan no se tocó. Lo que se movió es la marca de sincronización, por su propio uso.**
+
+---
+
+## 18. Sesión 14 — historial de Isi a cero
+
+Pedido: *"reinicia todas las estadísticas y entrenamientos de Isi porque aún no ha empezado y
+estaba solo probando"*. Se borró el **historial**, no el plan.
+
+### 18.1 Qué había realmente
+
+Menos de lo que suena:
+
+| | Antes | Después |
+|---|---|---|
+| `workouts` (entrenos registrados) | **0** — nunca llegó a completar ninguno | 0 |
+| `bodyweight` (pesajes) | **1** → `{d: '2026-09-07', w: 70}` | 0 |
+| `exWeights` (peso memorizado por ejercicio) | **6**, todos a `w: 0` | 0 |
+| `active` (sesión a medias) | ninguna | ninguna |
+
+Los seis `exWeights` a cero son la huella típica de abrir una sesión, pasar por unos ejercicios sin
+meter peso y salir. Encaja con "estaba solo probando".
+
+**Un detalle que conviene mirar:** el pesaje decía **70 kg**, y el plan se hizo sobre los **67 kg**
+que me diste. Si esos 70 eran una medición real y no una prueba, se ha borrado — está entero en el
+backup de fuera del repo, y de todos modos se vuelve a meter en dos toques desde la app.
+
+### 18.2 Por qué hubo que editar el fichero a mano
+
+Dos caminos que no servían:
+
+* **El endpoint de import no puede.** Por diseño *"an import never touches workouts, weigh-ins or
+  settings"*, y hay un test que lo fija. Es una garantía que no quiero romper por esto.
+* **El botón de la app tampoco.** Lo único nativo es *«Restablecer todo»*, que según su propio
+  texto *"borra tu plan, entrenos y peso corporal"* — se llevaría por delante las tres rutinas que
+  costó tres sesiones dejar bien.
+
+Así que se editó `data/state-yzOKOypIow2eC_gN.json` directamente: `workouts` y `bodyweight` a
+lista vacía, `exWeights` a objeto vacío, `active` fuera. Escritura por fichero temporal + `replace`,
+igual que hace `atomicWrite`.
+
+**Y `_ts` se puso al presente** (`1788794361628`, antes `1788793990510`). No es cosmético: si se
+dejara el viejo, el móvil de Isi ganaría al sincronizar y **devolvería los datos borrados**. Con el
+del servidor más nuevo, su app adopta la copia limpia en un arranque en frío.
+
+Copias antes de borrar: `data/state-yzOKOypIow2eC_gN.json.manual-20260907T151921Z` y
+`/home/ubuntu/state-isi-pre-reset-20260907T151921Z.json` (fuera del repo, `600`).
+
+### 18.3 Lo que NO se tocó
+
+```
+routines : 3  → Isi · Full Body A/B/C, con sus MISMOS ids (mtrbegcb9iwwc / 9sorj / uoi5g)
+week     : {1: A, 3: B, 4: C}
+customEx : Plancha frontal, Superman o pájaro-perro  (siguen huérfanos, ver §17.4)
+ajustes  : lang es · weekStart 1 · unit kg · theme system
+```
+
+`effectiveRoutine()` sobre el fichero ya editado: **Lun → Full Body A (8), Mié → Full Body B (8),
+Jue → Full Body C (8)**, resto vacío. Igual que antes del borrado.
+
+Perfil de Alberto: `md5 5e553e1a4d5dc4b316ddc5cae7fdf3ec`, sin cambios desde su propia
+sincronización de §17.5. 23 rutinas, 32 `dayPlan`, 0 workouts.
+
+### 18.4 Lo que tiene que hacer Isi
+
+**Cerrar la app del todo y volver a abrirla.** Si la deja abierta con la copia antigua en memoria y
+toca cualquier cosa, su `pushState()` devolvería el pesaje y los pesos memorizados — es el mismo
+hueco de concurrencia documentado en `docs/IMPORT_API.md` §7, que `expected_ts` detecta pero no
+impide.
+
+### 18.5 Un hueco que esto deja a la vista
+
+Es la **segunda vez** que hay que editar un `state-<uid>.json` a mano porque no existe forma de
+borrar historial sin borrar también el plan. Ni el endpoint ni la app ofrecen un punto intermedio.
+Con más gente en la instancia esto se repetirá. **No se ha construido nada** — queda anotado junto
+al resto de lo diferido en `docs/MULTIUSER_NOTES.md`.
