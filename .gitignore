@@ -8,7 +8,16 @@ data/
 # Local config
 .env
 .env.*
+env.*
 !.env.example
+# Cualquier copia de seguridad, se llame como se llame. Los backups de ficheros con
+# secretos van FUERA del árbol del repo (ver HANDOFF §13, §14); esto es el cinturón.
+*.bak
+*.bak-*
+*.old
+*.orig
+*secret*
+!frontend/src/lib/coach-secrets.js
 
 # Build output / deps
 frontend/dist/

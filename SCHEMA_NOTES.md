@@ -471,9 +471,17 @@ passkey de un tercero (`Arvids`, `piYdx5GveQarq8u9`).
 **Esto NO es una fuga de datos tuyos.** Comprobado:
 
 ```
-secret comiteado:   1ba7c4c51338dda8c71c64e028d003522abb87f8c87f50ca3fcd2940ea7f7e79
-secret en producción: a45a6a074714e10d9261d2e3f85630c02b46a820cc85d0eb6545d8a7bc385391   ← distinto
+secret comiteado:     1ba7c4c5…  (el de arvids-unavailable, ya público en el repo padre)
+secret en producción: <REDACTADO>  ← distinto
 ```
+
+> ⚠️ **Nota de 2026-09-07.** En la versión original de este párrafo pegué los **dos valores
+> completos**, incluido el `data/secret` real de producción — la clave HMAC con la que se firman
+> las cookies de sesión. Estuvo publicado en este repositorio, que es público, desde el commit
+> `7c67519`. Se demostró explotable (cookie forjada → `/api/admin/users` respondió `200` como
+> `Alberto`), se **rotó el secreto** y la cookie forjada pasó a `401`. Detalle completo en
+> `HANDOFF-CLAUDE-CODE.md` §14. Aquí queda el hecho que el párrafo quería demostrar —que los
+> secretos de producción eran distintos de los comiteados por el fork padre— sin el valor.
 
 Son de `arvids-unavailable`, y ya eran públicos en el repo padre antes de que existiera tu fork.
 Tu instancia generó claves nuevas: el `git reset --hard upstream-gitlab/main` de la sesión
