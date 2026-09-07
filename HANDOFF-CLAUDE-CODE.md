@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 9 — registro cerrado + panel de admin. Y un incidente: filtré el `.env` a un repo público (§13). Clave rotada; queda tu decisión sobre purgar la historia.**
+Última actualización: **2026-09-07, sesión 9 — registro cerrado + panel de admin. Incidente del `.env` (§13): clave rotada, y decidido no purgar la historia. Nada abierto.**
 
 ---
 
@@ -1051,14 +1051,23 @@ ficheros están en `data/`, que sí está correctamente ignorado y nunca se toc�
 3. `.gitignore` ampliado de `.env` a `.env` + `.env.*` + `!.env.example`, para que cualquier
    `.bak`, `.local` o `.prod` futuro quede cubierto por defecto y no por acordarse.
 
-### 13.3 Lo que queda, y por qué no lo he hecho
+### 13.3 La historia NO se purga — decidido el 2026-09-07
 
-El blob **sigue existiendo en la historia**, alcanzable en el commit `846764b`. Purgarlo exige
-reescribir una rama ya empujada (`filter-repo` + `push --force`), y la regla 0 de este proyecto
-dice parar y preguntar antes de reescribir historia. **Está esperando tu decisión.**
+El blob sigue existiendo en la historia, alcanzable en el commit `846764b`. **Decisión de Alberto:
+no reescribir.** Razones, y son buenas:
 
-Mi lectura: con la clave rotada, el valor publicado es basura, así que la purga es higiene y no
-urgencia. Lo demás del fichero no era secreto.
+* la clave publicada está rotada y devuelve `401` — el valor es basura;
+* el resto del fichero (`RP_ID`, `ORIGIN`, un puerto de loopback, `AUDIT_IP`) no es secreto y ya
+  era público por el certificado;
+* reescribir una rama empujada tiene su propio riesgo, cambiaría **todos** los hashes desde
+  `846764b` y dejaría sin resolver las referencias a commits de este mismo documento;
+* GitHub conserva el blob en caché un tiempo aunque se purgue, así que la purga tampoco es una
+  garantía — la rotación sí.
+
+**El commit se queda como registro honesto de lo que pasó.** No hay nada pendiente de esto.
+
+Lo que sí queda hecho para que no se repita: `.gitignore` cubre ahora `.env.*` con excepción
+explícita para `.env.example`.
 
 ### 13.4 Qué cambia para ti en la práctica
 
