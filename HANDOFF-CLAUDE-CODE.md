@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 9 — registro cerrado (INVITE_ONLY) y panel de admin activo. Solo configuración, cero código.**
+Última actualización: **2026-09-07, sesión 9 — registro cerrado + panel de admin. Y un incidente: filtré el `.env` a un repo público (§13). Clave rotada; queda tu decisión sobre purgar la historia.**
 
 ---
 
@@ -1014,3 +1014,54 @@ Sigue abierto y documentado en `docs/MULTIUSER_NOTES.md`, a la espera de que dec
 el *rate limit* global por IP de contenedor (§2.3), la clave de importación única (§2.4), la IP
 real en el log (§2.5) y la tabla de alias en español para objetivos distintos de la fuerza (§3).
 Ninguna es un riesgo abierto hoy.
+
+---
+
+## 13. Incidente: el `.env` acabó en el repo público
+
+**Causa, sin rodeos: mía.** Antes de editar el `.env` hice una copia a su lado
+(`.env.bak-20260907T074425Z`) y luego preparé el commit con `git add -A`. La regla del
+`.gitignore` es la cadena literal `.env`, que **no** cubre `.env.bak-*`. El fichero entró en el
+commit `846764b` y se empujó a un repositorio **público** — justo en el commit que decía ser
+"sólo configuración".
+
+### 13.1 Qué se expuso
+
+| Contenido | ¿Secreto? |
+|---|---|
+| `IMPORT_API_KEY` | **Sí.** Escritura total sobre el plan de cualquier perfil de la instancia |
+| `RP_ID`, `ORIGIN` | No — `gym.albertoalbaladejo.com` es público desde que Certbot emitió el certificado |
+| `WEB_PORT=127.0.0.1:8090` | No — es un puerto de loopback, inalcanzable desde fuera |
+| `AUDIT_IP=net` | No |
+
+No se expuso `data/secret` (la clave de sesión), ni las claves VAPID, ni ninguna passkey: esos
+ficheros están en `data/`, que sí está correctamente ignorado y nunca se tocó.
+
+### 13.2 Qué se hizo, y en qué orden
+
+1. **Rotar la clave, primero que nada.** `openssl rand -hex 32` nueva en `.env`, contenedor `api`
+   reiniciado. Verificado sobre producción:
+   ```
+   clave filtrada → 401 {"error":"bad or missing X-Import-Key"}
+   clave nueva    → 400 {"error":"payload has no phases…"}   ← autentica, el 400 es del payload vacío
+   ```
+   **Esto es lo que cierra la exposición de verdad**: el valor publicado ya no vale para nada.
+2. Fichero borrado del disco y de `HEAD` (commit `0941a8a`). Confirmado en el remoto:
+   `GET /contents/.env.bak-…` → `404`.
+3. `.gitignore` ampliado de `.env` a `.env` + `.env.*` + `!.env.example`, para que cualquier
+   `.bak`, `.local` o `.prod` futuro quede cubierto por defecto y no por acordarse.
+
+### 13.3 Lo que queda, y por qué no lo he hecho
+
+El blob **sigue existiendo en la historia**, alcanzable en el commit `846764b`. Purgarlo exige
+reescribir una rama ya empujada (`filter-repo` + `push --force`), y la regla 0 de este proyecto
+dice parar y preguntar antes de reescribir historia. **Está esperando tu decisión.**
+
+Mi lectura: con la clave rotada, el valor publicado es basura, así que la purga es higiene y no
+urgencia. Lo demás del fichero no era secreto.
+
+### 13.4 Qué cambia para ti en la práctica
+
+La nueva `IMPORT_API_KEY` ya está en `/home/ubuntu/opengym/.env`. `scripts/import-plan.mjs` la lee
+de ahí, así que **los comandos documentados siguen funcionando sin cambios**. Si tenías la
+anterior apuntada en algún sitio, bórrala: no sirve.
