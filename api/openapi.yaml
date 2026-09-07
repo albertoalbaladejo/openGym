@@ -1512,6 +1512,15 @@ components:
       properties:
         code: { type: string, description: 16 hex chars. }
         note: { type: string }
+        description:
+          type: string
+          maxLength: 1000
+          description: >-
+            How to do the exercise. Written to the custom exercise's `desc` — the field the
+            app's own custom editor writes and the exercise sheet renders — and only used
+            when the name resolves to a custom, since a catalogue exercise already has an
+            image and an instruction pack. Supplying it updates a custom the profile
+            already holds. Distinct from `note`, a remark on this day's prescription.
         createdBy: { type: string, description: Admin user id. }
         created: { type: string, description: ISO timestamp. }
         usedBy:
@@ -1598,6 +1607,15 @@ components:
             resolves exactly one routine per calendar day. Defaults to the first phase.
         emit_deload_routines: { type: boolean, default: true }
         deload_suffix: { type: string, default: ' (descarga)' }
+        phase_owns_week:
+          type: boolean
+          default: false
+          description: >-
+            Let the active phase define the WHOLE week: every `week` slot is cleared before
+            its days are written, so a weekday the phase does not name becomes a real rest
+            day, and deload dates the plan no longer schedules are dropped from `dayPlan`.
+            Deletes nothing — routines it stops scheduling stay in the list, startable by
+            hand. Off by default, in which case a weekday keeps whatever was there.
         prune_phase_routines:
           type: boolean
           default: false

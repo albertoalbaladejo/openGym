@@ -176,6 +176,8 @@ export function buildExercise(src, ctx) {
   }
 
   if (src.bodyweight != null) cfg.bodyweight = !!src.bodyweight;
+  // `src.description` is not a cfg field: it belongs to the EXERCISE, not to this prescription of
+  // it, and resolveExercise has already written it onto the custom (exercise-resolve.js).
 
   const prog = normalizeProgression(src.progression ?? src.prog);
   if (src.progression != null && !prog) warnings.push(`"${resolution.name}": unknown progression "${src.progression}" — falling back to the routine default`);
@@ -367,6 +369,11 @@ export function importPlan(state, payload, { uid }) {
 
   /* --- the weekly schedule, from the active phase only --- */
   if (activeIdx >= 0) {
+    // Without this, a weekday the plan USED to fill keeps whatever was there: dropping the
+    // Tuesday cardio from the payload left Tuesday still pointing at it. `phase_owns_week` says
+    // the active phase defines the whole week, so a day it does not name becomes a real rest
+    // day. Off by default, because it also clears routines this plan never put there.
+    if (payload.phase_owns_week === true) for (let wd = 0; wd <= 6; wd++) delete state.week[wd];
     const taken = new Set();
     built.filter(b => b.phaseIdx === activeIdx).forEach(b => {
       b.weekdays.forEach(wd => {
@@ -401,6 +408,18 @@ export function importPlan(state, payload, { uid }) {
     });
   } else if (emitDeload && built.some(b => b.savedDeload)) {
     summary.warnings.push('deload routines were created but not scheduled — add "start_date" (the Monday of plan week 1) to have them written into dayPlan');
+  }
+
+  // The same reasoning for the date overrides: a deload date this plan no longer schedules is a
+  // leftover of its previous shape, and would silently train a day the week says is rest.
+  if (payload.phase_owns_week === true) {
+    const managed = new Set(built.flatMap(b => [b.saved.id, b.savedDeload?.id]).filter(Boolean));
+    Object.entries(state.dayPlan).forEach(([iso, id]) => {
+      if (managed.has(id) && !writtenDates.has(iso)) {
+        delete state.dayPlan[iso];
+        summary.day_overrides_removed = (summary.day_overrides_removed || 0) + 1;
+      }
+    });
   }
 
   /* --- optional: drop what this plan used to have and no longer does --- */
@@ -487,6 +506,7 @@ function cardioAsDay(c, i) {
       speed: c.speed,
       mode: 'cardio',
       progression: 'off',
+      description: c.description,
       note: [c.intensity, c.frequency, c.pattern].filter(Boolean).join(' · ') || undefined,
     }],
   };

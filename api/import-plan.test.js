@@ -288,3 +288,109 @@ test('pruning stays idempotent — a second identical import removes nothing', (
   assert.equal(second.routines.removed.length, 0);
   assert.deepEqual(bare(s), after, 'the state is byte-identical the second time');
 });
+
+/* ---------- phase_owns_week ---------- */
+
+test('without the flag, a weekday the plan stops filling keeps what was there', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const tuesdayBefore = s.week[2];
+  assert.ok(tuesdayBefore, 'the plan fills Tuesday');
+
+  const noCardio = structuredClone(PLAN);
+  noCardio.phases.forEach(p => (p.cardio || []).forEach(c => { c.days = []; }));
+  noCardio.schedule_postural_on_rest_days = false;
+  importPlan(s, noCardio, { uid });
+
+  assert.equal(s.week[2], tuesdayBefore, 'Tuesday still points at the routine it used to');
+});
+
+test('phase_owns_week makes every unnamed weekday a real rest day', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+
+  const only3 = structuredClone(PLAN);
+  only3.phase_owns_week = true;
+  only3.schedule_postural_on_rest_days = false;
+  only3.phases.forEach(p => (p.cardio || []).forEach(c => { c.days = []; }));
+  const r = importPlan(s, only3, { uid });
+
+  assert.deepEqual(Object.keys(s.week).sort(), ['1', '3', '5'], 'only Mon/Wed/Fri are scheduled');
+  [0, 2, 4, 6].forEach(d => assert.equal(s.week[d], undefined, `weekday ${d} is rest`));
+  assert.equal(Object.keys(r.week).length, 3);
+});
+
+test('phase_owns_week also drops the deload dates the plan no longer schedules', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const before = Object.keys(s.dayPlan).length;
+
+  const only3 = structuredClone(PLAN);
+  only3.phase_owns_week = true;
+  only3.schedule_postural_on_rest_days = false;
+  only3.phases.forEach(p => (p.cardio || []).forEach(c => { c.days = []; }));
+  const r = importPlan(s, only3, { uid });
+
+  assert.ok(Object.keys(s.dayPlan).length < before, 'the abandoned dates are gone');
+  assert.ok(r.day_overrides_removed > 0);
+  // every date that survives falls on a weekday the plan still trains
+  Object.keys(s.dayPlan).forEach(iso => {
+    const wd = new Date(iso + 'T12:00:00').getDay();
+    assert.ok([1, 3, 5].includes(wd), `${iso} is a weekday the plan no longer trains`);
+  });
+});
+
+test('phase_owns_week leaves the routines themselves alone', () => {
+  const s = emptyState();
+  const uid = minter();
+  importPlan(s, PLAN, { uid });
+  const count = s.routines.length;
+
+  const only3 = structuredClone(PLAN);
+  only3.phase_owns_week = true;
+  only3.phases.forEach(p => (p.cardio || []).forEach(c => { c.days = []; }));
+  const r = importPlan(s, only3, { uid });
+
+  assert.equal(s.routines.length, count, 'unscheduling is not deleting');
+  assert.equal(r.routines.removed.length, 0);
+  assert.ok(s.routines.some(x => /Cardio/.test(x.name)), 'the cardio routines are still there to reactivate by hand');
+});
+
+/* ---------- description on a custom exercise ---------- */
+
+test('a description lands on the custom exercise, capped like the app caps it', () => {
+  const s = emptyState();
+  const uid = minter();
+  const p = {
+    daily_postural_routine: [
+      { name: 'Chin tucks', sets: 3, reps: '10', description: 'Sentada, barbilla atrás. Aguanta 5 s.' },
+      { name: 'Wall angels', sets: 3, reps: '10', description: 'x'.repeat(1500) },
+    ],
+  };
+  importPlan(s, p, { uid });
+  const chin = s.customEx.find(c => c.n === 'Chin tucks');
+  assert.equal(chin.desc, 'Sentada, barbilla atrás. Aguanta 5 s.');
+  assert.equal(s.customEx.find(c => c.n === 'Wall angels').desc.length, 1000, 'same 1000-char cap as sheets.jsx');
+});
+
+test('a description updates a custom the profile already has', () => {
+  const s = emptyState();
+  const uid = minter();
+  s.customEx.push({ id: 'existing', n: 'Chin tucks', bp: 'neck' });   // no desc, as the importer used to create them
+  importPlan(s, { daily_postural_routine: [{ name: 'Chin tucks', sets: 3, reps: '10', description: 'Barbilla atrás, 5 s.' }] }, { uid });
+
+  assert.equal(s.customEx.length, 1, 'reused, not duplicated');
+  assert.equal(s.customEx[0].id, 'existing');
+  assert.equal(s.customEx[0].desc, 'Barbilla atrás, 5 s.');
+});
+
+test('no description leaves an existing one untouched', () => {
+  const s = emptyState();
+  const uid = minter();
+  s.customEx.push({ id: 'existing', n: 'Chin tucks', bp: 'neck', desc: 'lo que ya había' });
+  importPlan(s, { daily_postural_routine: [{ name: 'Chin tucks', sets: 3, reps: '10' }] }, { uid });
+  assert.equal(s.customEx[0].desc, 'lo que ya había');
+});

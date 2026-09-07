@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 14 — historial de Isi puesto a cero (§18). Su plan intacto; tiene que cerrar y reabrir la app.**
+Última actualización: **2026-09-07, sesión 15 — mi plan a 3 días reales de calendario, instrucciones en los 8 ejercicios propios, y el historial ya estaba vacío (§19).**
 
 ---
 
@@ -1673,3 +1673,110 @@ Es la **segunda vez** que hay que editar un `state-<uid>.json` a mano porque no 
 borrar historial sin borrar también el plan. Ni el endpoint ni la app ofrecen un punto intermedio.
 Con más gente en la instancia esto se repetirá. **No se ha construido nada** — queda anotado junto
 al resto de lo diferido en `docs/MULTIUSER_NOTES.md`.
+
+---
+
+## 19. Sesión 15 — 3 días de calendario, instrucciones en los propios, historial ya vacío
+
+### 19.1 El historial ya estaba a cero — §3 sin objeto
+
+Antes de borrar nada, lo que había:
+
+```
+workouts 0 · bodyweight 0 · exWeights 0 · active ninguna
+```
+
+**Nada que borrar.** Las pruebas de entreno no llegaron a guardarse o se descartaron. No se hizo
+backup específico de esa parte porque no había parte. Tras el import sigue igual: el endpoint no
+toca `workouts` ni `bodyweight` por diseño.
+
+### 19.2 Imágenes: verificadas con peticiones reales, no por inferencia
+
+De los **42 ids distintos** del plan: **34 del catálogo, 8 propios**. Los 34 tienen `img` y `gif`
+en el catálogo — **ninguno se queda sin**. Tres probados por HTTP contra la instancia:
+
+```
+img/0770-jFtipLl.jpg  200   7 559 B     gif/0770-jFtipLl.gif  200  108 073 B   smith squat
+img/0577-T0yTjgW.jpg  200   9 215 B     gif/0577-T0yTjgW.gif  200  135 362 B   lever chest press
+img/1350-7I6LNUG.jpg  200  10 628 B     gif/1350-7I6LNUG.gif  200  136 785 B   lever seated row
+```
+
+### 19.3 El campo de instrucciones existe y se llama `desc`
+
+No hizo falta inventar nada, que era el riesgo que señalaba el encargo:
+
+* `sheets.jsx:641` — el editor de ejercicios propios **de la propia app** guarda `desc`.
+* `sheets.jsx:554` y `:1019` — la ficha del ejercicio y la vista de entreno **renderizan**
+  `{ex.desc && <div className="exnote">{ex.desc}</div>}`.
+* `sheets.jsx:631` — la app lo capa a **1000 caracteres**.
+
+Lo que faltaba era que el importador supiera escribirlo: los 8 propios tenían sólo `{id, n, bp}`.
+Añadido **`description`** al payload → `desc` en el ejercicio, con el mismo tope de 1000, y
+**actualiza también los que ya existen** (no sólo los que crea). Se ignora para un ejercicio que
+resolvió contra el catálogo, que ya trae su propio pack de instrucciones.
+
+Las 8 instrucciones, en español, con postura inicial / movimiento / punto de control:
+
+| Ejercicio propio | Longitud |
+|---|---|
+| Chin tucks | 286 car. |
+| Estiramiento de pectoral en marco de puerta | 311 car. |
+| Wall angels | 312 car. |
+| Plancha frontal | 263 car. |
+| Plancha lateral | 277 car. |
+| intervalos moderados cinta | 299 car. |
+| HIIT corto | 261 car. |
+| cardio suave | 219 car. |
+
+### 19.4 La respuesta a la pregunta de §2: `prune_phase_routines` NO servía
+
+Prune **borra rutinas**, y el encargo pedía conservar las de cardio. Y desprogramar no es borrar:
+el importador escribía los días que el plan ocupa pero **no limpiaba los que dejaba de ocupar**,
+así que el martes seguía apuntando al cardio aunque el payload ya no lo mencionara.
+
+Capacidad nueva: **`phase_owns_week`** (opt-in). La fase activa define la semana entera — se
+limpian los 7 `week` antes de escribir sus días, y se retiran las fechas de `dayPlan` que el plan
+ya no programa. **No borra ni una rutina.** La diferencia con `prune_phase_routines` queda escrita
+en `docs/IMPORT_API.md` §6.2: *este desprograma, aquel elimina*.
+
+### 19.5 El import
+
+```
+✓ imported  ·  profile 3TR-nhgjg3tPyw4R
+  backup      state-3TR-nhgjg3tPyw4R.json.bak-2026-09-07T15-28-10-646Z
+  state_ts    1788794890646   (partía de 1788793993872, leído del disco)
+  routines    0 created, 22 updated, 0 removed
+  exercises   58 matched, 0 created as custom, 8 custom reused
+  calendar    18 day overrides written   (antes 32 → 14 descargas de mar/jue/sáb retiradas)
+```
+
+Copias previas: `data/state-3TR-nhgjg3tPyw4R.json.manual-20260907T152734Z` y
+`/home/ubuntu/state-alberto-pre-3dias-20260907T152734Z.json` (fuera del repo, `600`).
+
+### 19.6 Verificación sobre el state real
+
+`effectiveRoutine()` — Fase 1 leída del fichero, fases 2 y 3 simuladas:
+
+```
+Fase 1    Lun F1 · Full Body 13 ej · Mié F1 · Full Body 13 · Vie F1 · Full Body 13 · resto descanso
+Fase 2    Lun F2 · Full Body A 12  · Mié F2 · Full Body B 12 · Vie F2 · Full Body C 13 · resto descanso
+Fase 3    Lun F3 · Push 10         · Mié F3 · Pull 10        · Vie F3 · Legs 10       · resto descanso
+```
+
+**Martes, jueves, sábado y domingo no devuelven ninguna rutina en ninguna de las tres fases.**
+
+El bloque postural sigue anexado: los tres últimos ejercicios de `F1 · Full Body` son Chin tucks,
+Estiramiento de pectoral y Wall angels.
+
+```
+rutinas 23 → 23 (ninguna borrada) · dayPlan 32 → 18 · workouts 0 · bodyweight 0
+9 rutinas desprogramadas pero presentes en la lista de Plan:
+  las 4 de cardio + sus 4 gemelas de descarga, y Postural diario
+```
+
+### 19.7 El perfil de Isi, sin tocar
+
+`md5 d0ba6b9ba7180f99827e9004df05cb4f`, `_ts 1788794361628` — el mismo valor que se le puso en el
+reset de §18. 3 rutinas, 0 workouts. Ni una escritura sobre su fichero.
+
+**Tests 61 → 68.**

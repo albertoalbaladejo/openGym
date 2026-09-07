@@ -19,6 +19,12 @@ export const cleanName = name => String(name || '')
   .replace(/\s+/g, ' ')
   .trim();
 
+/** Same cap the app's own custom editor applies (sheets.jsx: desc.trim().slice(0, 1000)). */
+const cleanDescription = v => {
+  const s = String(v == null ? '' : v).trim().slice(0, 1000);
+  return s || null;
+};
+
 /** The written name with parenthesised notes removed, but the " o <alternativa>" tail kept. */
 const keepAlternative = name => String(name || '').replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -85,7 +91,7 @@ export function resolveExercise(ex, ctx) {
   // drops an " o <alternativa>" tail, which is right for the matcher and wrong here: the
   // alternative is half the instruction. "Superman o pájaro-perro" filed as "Superman" would
   // read like the push-up this entry exists to avoid.
-  if (isForceCustom(exact)) return custom(raw, keepAlternative(raw), ctx, 'forced');
+  if (isForceCustom(exact)) return custom(raw, keepAlternative(raw), ctx, 'forced', ex?.description);
   if (exact) {
     const id = isDirectId(exact) ? exact.slice(1) : matchExercise(exact);
     if (id && EXIDX[id]) return { id, via: 'catalogue-es', name: raw, query: exact };
@@ -108,13 +114,13 @@ export function resolveExercise(ex, ctx) {
   }
 
   // 5. A custom exercise.
-  return custom(raw, stripped, ctx);
+  return custom(raw, stripped, ctx, undefined, ex?.description);
 }
 
 /** Reused when the profile (or this same import) already has one with the same name and body
  *  part — the rule mergePlan already uses, and what makes a second run reuse rather than
  *  duplicate. `why` is only for the caller's benefit; the shape of the result is the same. */
-function custom(raw, stripped, ctx, why) {
+function custom(raw, stripped, ctx, why, description) {
   const bp = bodyPartFor(raw);
   const key = normalizeStr(stripped);
   // Compared against the stored name BOTH as written and as cleanName() would leave it. A
@@ -124,9 +130,18 @@ function custom(raw, stripped, ctx, why) {
   // typed in the app with a parenthesised note still matches.
   const same = [...(ctx.customEx || []), ...(ctx.newCustom || [])]
     .find(c => c.bp === bp && (normalizeStr(c.n) === key || normalizeStr(cleanName(c.n)) === key));
-  if (same) return { id: same.id, via: 'custom-existing', name: raw, ...(why ? { why } : {}) };
+  if (same) {
+    // A description supplied now updates one that is already there. An invented exercise has no
+    // image and no instruction pack, so `desc` — the field the app's own custom editor writes and
+    // the exercise sheet renders — is the only place a "how to do this" can live.
+    const d = cleanDescription(description);
+    if (d && same.desc !== d) same.desc = d;
+    return { id: same.id, via: 'custom-existing', name: raw, ...(why ? { why } : {}) };
+  }
 
   const created = { id: ctx.uid(), n: stripped, bp };
+  const d = cleanDescription(description);
+  if (d) created.desc = d;
   ctx.newCustom.push(created);
   return { id: created.id, via: 'custom-new', name: raw, created, ...(why ? { why } : {}) };
 }

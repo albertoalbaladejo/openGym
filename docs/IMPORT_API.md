@@ -153,6 +153,7 @@ curl -sS -X POST https://gym.example.com/api/admin/import-plan \
   "emit_deload_routines": true,          // default true
   "deload_suffix": " (descarga)",        // default " (descarga)"
   "prune_phase_routines": false,         // default false — see §6.1
+  "phase_owns_week": false,              // default false — see §6.2
   "append_postural_to_training_days": true,   // default true
   "schedule_postural_on_rest_days": true,     // default true
   "postural_routine_name": "Postural diario",
@@ -213,7 +214,9 @@ to the app's default.
   "warmup_sets": 2,
   "superset_with": "Extensión de tríceps en polea",   // must be the NEXT or PREVIOUS exercise
   "tag": "postural",                     // free label — see the note below
-  "note": "por pierna"
+  "note": "por pierna",
+  "description": "Antebrazos y puntas de los pies…"   // solo si el ejercicio
+                                                      // acaba siendo CUSTOM
 }
 ```
 
@@ -234,6 +237,12 @@ Behaviour worth knowing:
 * **`tag` is a note, not a tag.** openGym has no tag field on an exercise. `tag: "postural"`
   is written into `note`, which is visible in the routine editor and travels with a shared
   plan file, but the muscle map does not read it.
+* **`description` is for the exercise, not for this prescription of it.** It is written to the
+  custom exercise's `desc` — the same field the app's own custom editor writes and the exercise
+  sheet renders, capped at the same 1000 characters. An invented exercise has no image, no GIF
+  and no instruction pack, so this is the only place a "how to do it" can live. It is ignored
+  for an exercise that resolved against the catalogue, and supplying it updates a custom the
+  profile already holds. `note` is the other thing: a remark on *this* day's prescription.
 * **Double progression needs two bounds.** A flat `"reps": "10"` under a `double` policy is
   filled in through the app's own `normalizeRepRange` (→ `8-10`) and reported as a warning, so
   the range is visible in the editor instead of being implied at read time.
@@ -343,6 +352,21 @@ deliberate removal it is.
 The response reports `routines.removed` (names) and `day_overrides_removed` (a count). The
 automatic backup is taken exactly as on any other import, so a prune is one `mv` away from being
 undone.
+
+### 6.2 `phase_owns_week` — turning an unfilled weekday into a real rest day
+
+**Off by default.** The import writes the weekdays the active phase names; it does not clear
+the ones it stops naming. Drop the Tuesday cardio from a payload and Tuesday keeps pointing at
+it.
+
+With the flag on, **the active phase defines the whole week**: every `week` slot is cleared
+before the phase's days are written, so a weekday the phase does not name becomes a real rest
+day. The same reasoning is applied to `dayPlan`: a deload date this plan no longer schedules is
+dropped, because otherwise the calendar would train a day the week says is rest.
+
+**It does not delete anything.** Routines the plan no longer schedules stay in the routine
+list, ready to start by hand from the Plan screen — which is the difference between this and
+`prune_phase_routines` (§6.1). Use this one to unschedule, that one to remove.
 
 Never touched:
 

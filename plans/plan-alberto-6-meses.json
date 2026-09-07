@@ -4,7 +4,7 @@
   "active_phase": "Fase 1 — Base",
   "emit_deload_routines": true,
   "append_postural_to_training_days": true,
-  "schedule_postural_on_rest_days": true,
+  "schedule_postural_on_rest_days": false,
   "phases": [
     {
       "name": "Fase 1 — Base",
@@ -89,7 +89,8 @@
               "sets": 3,
               "timed_s": "30-45",
               "rest_s": 45,
-              "progression": "time"
+              "progression": "time",
+              "description": "Antebrazos y puntas de los pies en el suelo, codos bajo los hombros. Cuerpo en línea recta de la cabeza a los talones. Aprieta glúteos y abdomen y respira con normalidad 30-45 s. Control: cadera ni hundida ni levantada; si la lumbar se arquea, apoya las rodillas."
             },
             {
               "name": "Crunch en máquina de abdominales",
@@ -103,10 +104,7 @@
       "cardio": [
         {
           "name": "Cardio moderado",
-          "days": [
-            "Martes",
-            "Jueves"
-          ],
+          "days": [],
           "type": "caminata rápida o bici",
           "duration_min": "25-30",
           "intensity": "moderada"
@@ -291,7 +289,8 @@
               "name": "Plancha lateral",
               "sets": 3,
               "timed_s": "30-40",
-              "note": "por lado"
+              "note": "por lado",
+              "description": "Tumbado de lado, antebrazo en el suelo con el codo bajo el hombro, pies apilados. Sube la cadera hasta formar una línea recta de tobillo a cabeza. Aguanta 30-40 s por lado. Control: no dejes caer la cadera ni gires el pecho hacia el suelo; si cuesta, apoya la rodilla de abajo."
             }
           ]
         }
@@ -299,13 +298,11 @@
       "cardio": [
         {
           "name": "Cardio intervalos",
-          "days": [
-            "Martes",
-            "Jueves"
-          ],
+          "days": [],
           "type": "intervalos moderados cinta o bici",
           "duration_min": "20",
-          "frequency": "2-3x/semana"
+          "frequency": "2-3x/semana",
+          "description": "20 min en cinta o bici alternando 1 min a ritmo exigente (puedes hablar con frases cortas) y 2 min suave para recuperar. Empieza con 5 min de calentamiento fácil y acaba con 3 min bajando pulsaciones. Control: en el tramo suave debes recuperar el aliento; si no, baja la intensidad del tramo fuerte."
         }
       ]
     },
@@ -457,23 +454,20 @@
       "cardio": [
         {
           "name": "HIIT corto",
-          "days": [
-            "Martes",
-            "Jueves"
-          ],
+          "days": [],
           "type": "HIIT corto",
           "duration_min": "15-20",
           "frequency": "2x/semana",
-          "pattern": "30s fuerte / 90s suave"
+          "pattern": "30s fuerte / 90s suave",
+          "description": "15-20 min: 30 s a intensidad alta y 90 s muy suave, repitiendo. Calienta 5 min antes y enfría 3 min al final. Control: los 30 s fuertes deben costar de verdad, pero manteniendo la técnica; si el ritmo cae mucho a partir de la 5ª repetición, corta la sesión ahí."
         },
         {
           "name": "Cardio suave",
-          "days": [
-            "Sábado"
-          ],
+          "days": [],
           "type": "cardio suave",
           "duration_min": "30",
-          "frequency": "1x/semana"
+          "frequency": "1x/semana",
+          "description": "30 min continuos caminando rápido, en bici o elíptica, a un ritmo en el que puedas mantener una conversación. Control: si te falta el aire para hablar, vas demasiado rápido — esto es recuperación, no entrenamiento duro."
         }
       ]
     }
@@ -484,21 +478,25 @@
       "sets": 3,
       "reps": "10",
       "note": "retracción de barbilla, aguantar 5s",
-      "progression": "off"
+      "progression": "off",
+      "description": "Sentado o de pie, espalda recta y mirada al frente. Lleva la barbilla hacia atrás como si hicieras papada, sin bajar la cabeza ni mirar al suelo. Aguanta 5 s notando estiramiento en la nuca y suelta despacio. Control: las orejas deben quedar alineadas sobre los hombros, no por delante."
     },
     {
       "name": "Estiramiento de pectoral en marco de puerta",
       "sets": 3,
       "timed_s": "30-45",
       "note": "por lado",
-      "progression": "off"
+      "progression": "off",
+      "description": "De pie en el marco de una puerta. Apoya antebrazo y palma en el marco con el codo a 90° y a la altura del hombro. Da un paso corto adelante con la pierna del mismo lado hasta notar estiramiento en el pecho. Aguanta 30-45 s sin rebotes y cambia de lado. Control: hombro abajo y atrás, sin arquear la zona lumbar."
     },
     {
       "name": "Wall angels",
       "sets": 3,
       "reps": "10",
-      "progression": "off"
+      "progression": "off",
+      "description": "De espaldas a la pared, pies a un palmo de ella. Pega glúteos, espalda alta y cabeza a la pared. Brazos en cruz con codos a 90°, dorso de manos y codos tocando la pared. Sube los brazos como un ángel de nieve y baja despacio. Control: si la zona lumbar o las muñecas se despegan, has subido demasiado — para ahí."
     }
   ],
-  "prune_phase_routines": true
+  "prune_phase_routines": true,
+  "phase_owns_week": true
 }
