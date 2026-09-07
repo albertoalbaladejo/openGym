@@ -33,7 +33,9 @@ export const ES_TO_EN = {
   'maquina de abductores': 'lever seated hip abduction',
   'maquina de aductores': 'lever seated hip adduction',
   'elevacion de talones de pie': 'lever standing calf raise',
-  'elevacion de talones sentado': 'lever seated calf raise',
+  'elevacion de talones sentado': '#0594',
+  'elevacion de talones sentada': '#0594',   // la forma femenina caía al prefijo genérico,
+                                             // que resuelve a la variante DE PIE — otro ejercicio
   'elevacion de talones': 'lever standing calf raise',
   'gemelos': 'lever standing calf raise',
 
@@ -68,6 +70,16 @@ export const ES_TO_EN = {
   'face pull': 'cable rear delt row rope',
   'contractor inverso': 'lever reverse fly',
   'reverse pec deck': 'lever reverse fly',
+
+  // El catálogo no tiene bird-dog ni el superman de extensión lumbar: lo único parecido de
+  // nombre es 'superman push-up', una flexión pliométrica de pecho. Dejar que el matcher
+  // acierte por el nombre archivaría trabajo lumbar suave bajo un ejercicio explosivo de
+  // empuje. '!custom' fuerza un ejercicio propio, que es la respuesta honesta.
+  // Ojo con la clave: normalizeKey corta el " o <alternativa>", así que
+  // "Superman o pájaro-perro" se busca como 'superman'.
+  'superman': '!custom',
+  'pajaro perro': '!custom',
+  'bird dog': '!custom',
 
   // ── core ──────────────────────────────────────────────────────────────────
   // Planks: the dataset has no plain front/side plank — only 'weighted front plank' and
@@ -108,6 +120,19 @@ export function normalizeKey(name) {
  * English wording the matcher can find (the dataset calls a pec deck a "lever seated fly"),
  * and guessing at a phrase that happens to match is worse than naming the id outright. */
 export const isDirectId = v => typeof v === 'string' && /^#[A-Za-z0-9_-]+$/.test(v);
+
+/* '!custom' says: do not let the matcher have this one. Used where the catalogue happens to
+ * contain something with a similar NAME and a different MEANING, which is the one case the
+ * matcher cannot get right on its own — it only sees words. */
+export const FORCE_CUSTOM = '!custom';
+export const isForceCustom = v => v === FORCE_CUSTOM;
+
+/** Only the exact curated entry, no prefix fallback. A human wrote this one down on purpose,
+ *  so it outranks the generic matcher; the prefix fallback does not, and stays after it. */
+export function exactFor(name) {
+  const key = normalizeKey(name);
+  return key && Object.prototype.hasOwnProperty.call(ES_TO_EN, key) ? ES_TO_EN[key] : null;
+}
 
 /** The English query (or '#id') for a Spanish name, or null when the table has nothing to say. */
 export function englishFor(name) {

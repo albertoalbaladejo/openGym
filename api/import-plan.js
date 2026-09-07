@@ -304,7 +304,7 @@ export function importPlan(state, payload, { uid }) {
 
     days.forEach((day, di) => {
       const dayName = String(day?.name || `Día ${di + 1}`).trim();
-      const routineName = `${prefixOf(phaseName, pi)} · ${dayName}`;
+      const routineName = `${prefixOf(phaseName, pi, phase?.prefix)} · ${dayName}`;
       const ex = buildExerciseList(day?.exercises, ctx, summary);
       // Every day the plan schedules, cardio included: "a daily postural routine" means daily,
       // and a mobility block after 25 minutes on a bike is the day it is least likely to happen
@@ -406,7 +406,7 @@ export function importPlan(state, payload, { uid }) {
   /* --- optional: drop what this plan used to have and no longer does --- */
   if (payload.prune_phase_routines === true) {
     prunePhaseRoutines(state, {
-      prefixes: phases.map((ph, i) => prefixOf(String(ph?.name || `Fase ${i + 1}`).trim(), i) + ' · '),
+      prefixes: phases.map((ph, i) => prefixOf(String(ph?.name || `Fase ${i + 1}`).trim(), i, ph?.prefix) + ' · '),
       keepIds: new Set([...built.map(b => b.saved.id), ...built.filter(b => b.savedDeload).map(b => b.savedDeload.id),
         ...(posturalRoutine ? [posturalRoutine.id] : [])]),
       writtenDates,
@@ -492,8 +492,12 @@ function cardioAsDay(c, i) {
   };
 }
 
-/** "Fase 1 — Base" → "F1". Short enough that the routine name still reads on a phone. */
-function prefixOf(phaseName, i) {
+/** "Fase 1 — Base" → "F1". Short enough that the routine name still reads on a phone.
+ *  A phase can name its own prefix instead — useful on a shared instance, where "Isi · Full
+ *  Body A" says whose routine it is and "F1 · Full Body A" does not. */
+function prefixOf(phaseName, i, explicit) {
+  const own = String(explicit || '').trim();
+  if (own) return own;
   const m = /\b(?:fase|phase|bloque|block)\s*(\d+)/i.exec(phaseName);
   return m ? `F${m[1]}` : `F${i + 1}`;
 }

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveExercise, cleanName, bodyPartFor } from './exercise-resolve.js';
 import { normalizeKey, englishFor } from './exercise-aliases.js';
+import { matchExercise } from '../frontend/src/lib/import-csv.js';
 import { EXIDX } from '../frontend/src/lib/exercises.js';
 
 const ctx = () => { let n = 0; return { customEx: [], newCustom: [], uid: () => 'u' + (++n) }; };
@@ -20,10 +21,40 @@ test('cleanName keeps the written name readable while dropping the note', () => 
   assert.equal(cleanName('Dominadas asistidas o jalón al pecho'), 'Dominadas asistidas');
 });
 
-test('an English name resolves straight against the catalogue', () => {
-  const r = resolveExercise({ name: 'Face pull' }, ctx());
+test('an English name with no curated entry resolves straight against the catalogue', () => {
+  const r = resolveExercise({ name: 'Barbell Bench Press' }, ctx());
   assert.equal(r.via, 'catalogue');
-  assert.ok(EXIDX[r.id], 'resolved id is in the catalogue');
+  assert.equal(r.id, '0025');
+});
+
+test('an exact curated entry outranks the matcher', () => {
+  // 'face pull' is in the table AND matchable by name; both agree, but the route is the
+  // curated one, because a phrase someone wrote down beats a word overlap.
+  const r = resolveExercise({ name: 'Face pull' }, ctx());
+  assert.equal(r.via, 'catalogue-es');
+  assert.ok(EXIDX[r.id]);
+});
+
+test('a curated entry can refuse the catalogue outright', () => {
+  // The one mistake the matcher cannot avoid: a catalogue name that is close and a meaning
+  // that is not. 'Superman o pájaro-perro' is lumbar extension work; 'superman push-up' is an
+  // explosive chest exercise, and the matcher happily picks it.
+  const c = ctx();
+  const r = resolveExercise({ name: 'Superman o pájaro-perro' }, c);
+  assert.equal(r.via, 'custom-new');
+  assert.equal(r.why, 'forced');
+  assert.equal(c.newCustom[0].bp, 'back', 'lumbar work, not the generic full-body bucket');
+  // …and the plain matcher really would have taken the push-up, which is the point.
+  assert.equal(matchExercise('Superman'), '0803');
+});
+
+test('the feminine spelling of a seated exercise does not fall through to the standing one', () => {
+  const sentada = resolveExercise({ name: 'Elevación de talones sentada' }, ctx());
+  const sentado = resolveExercise({ name: 'Elevación de talones sentado (gemelos)' }, ctx());
+  const dePie = resolveExercise({ name: 'Elevación de talones de pie (gemelos)' }, ctx());
+  assert.equal(sentada.id, sentado.id, 'sentada and sentado are the same exercise');
+  assert.notEqual(sentada.id, dePie.id, 'and neither is the standing one');
+  assert.equal(EXIDX[sentada.id].n, 'lever seated calf raise');
 });
 
 test('a Spanish name resolves through the alias table', () => {

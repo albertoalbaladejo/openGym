@@ -1,0 +1,187 @@
+{
+  "plan": "Isi — fuerza y tono, 3 días/semana",
+  "start_date": "2026-09-07",
+  "emit_deload_routines": false,
+  "append_postural_to_training_days": false,
+  "schedule_postural_on_rest_days": false,
+  "phases": [
+    {
+      "name": "Plan base — fuerza y tono",
+      "prefix": "Isi",
+      "weeks": [
+        1,
+        999
+      ],
+      "progression_default": "double_progression",
+      "deload_weeks": [],
+      "days": [
+        {
+          "name": "Full Body A",
+          "repeat_days": [
+            "Lunes"
+          ],
+          "exercises": [
+            {
+              "name": "Prensa de piernas",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "rango parcial, no bajar más de 90° de flexión de rodilla"
+            },
+            {
+              "name": "Extensión de cuádriceps",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "peso ligero-moderado, movimiento lento"
+            },
+            {
+              "name": "Curl femoral sentado",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "con respaldo, sin curvar espalda"
+            },
+            {
+              "name": "Remo sentado en polea agarre neutro",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "espalda apoyada"
+            },
+            {
+              "name": "Press de pecho en máquina",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "sentada, espalda apoyada"
+            },
+            {
+              "name": "Curl de bíceps en máquina",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Extensión de tríceps en polea",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "codos pegados al cuerpo"
+            },
+            {
+              "name": "Plancha frontal",
+              "sets": 3,
+              "timed_s": "20-30",
+              "progression": "time",
+              "note": "apoyada en rodillas si hace falta, parar si molesta la zona lumbar"
+            }
+          ]
+        },
+        {
+          "name": "Full Body B",
+          "repeat_days": [
+            "Miércoles"
+          ],
+          "exercises": [
+            {
+              "name": "Máquina de abductores",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "sin impacto en rodilla"
+            },
+            {
+              "name": "Máquina de aductores",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Elevación de talones sentada",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Jalón al pecho por delante",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "nunca detrás de la nuca, torso recto"
+            },
+            {
+              "name": "Contractor inverso",
+              "sets": 3,
+              "reps": "15",
+              "note": "deltoides posterior, sin carga en el cuello"
+            },
+            {
+              "name": "Press militar en máquina",
+              "sets": 3,
+              "reps": "12",
+              "note": "rango controlado, parar si molesta el cuello"
+            },
+            {
+              "name": "Curl martillo con mancuernas",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Extensión de tríceps en máquina",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Superman o pájaro-perro",
+              "sets": 3,
+              "reps": "10",
+              "per_side": true,
+              "note": "por lado, ideal para zona lumbar, muy controlado"
+            }
+          ]
+        },
+        {
+          "name": "Full Body C",
+          "repeat_days": [
+            "Jueves"
+          ],
+          "exercises": [
+            {
+              "name": "Prensa de piernas",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "un poco menos de peso que el lunes, sesión más suave"
+            },
+            {
+              "name": "Curl femoral sentado",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Elevación de talones sentada",
+              "sets": 3,
+              "reps": "15"
+            },
+            {
+              "name": "Remo en polea baja agarre en V",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Aperturas en máquina (pec deck)",
+              "sets": 3,
+              "reps": "12-15",
+              "note": "suave para el hombro"
+            },
+            {
+              "name": "Curl de bíceps en máquina",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Extensión de tríceps en polea",
+              "sets": 3,
+              "reps": "12-15"
+            },
+            {
+              "name": "Plancha frontal",
+              "sets": 3,
+              "timed_s": "20-30",
+              "progression": "time"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
