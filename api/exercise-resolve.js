@@ -117,8 +117,13 @@ export function resolveExercise(ex, ctx) {
 function custom(raw, stripped, ctx, why) {
   const bp = bodyPartFor(raw);
   const key = normalizeStr(stripped);
+  // Compared against the stored name BOTH as written and as cleanName() would leave it. A
+  // forced custom is stored with its " o <alternativa>" tail intact, which cleanName strips —
+  // so comparing only the cleaned form made "Superman o pájaro-perro" fail to recognise itself
+  // and duplicate on every re-import. The cleaned form stays as well, so a custom the user
+  // typed in the app with a parenthesised note still matches.
   const same = [...(ctx.customEx || []), ...(ctx.newCustom || [])]
-    .find(c => normalizeStr(cleanName(c.n)) === key && c.bp === bp);
+    .find(c => c.bp === bp && (normalizeStr(c.n) === key || normalizeStr(cleanName(c.n)) === key));
   if (same) return { id: same.id, via: 'custom-existing', name: raw, ...(why ? { why } : {}) };
 
   const created = { id: ctx.uid(), n: stripped, bp };

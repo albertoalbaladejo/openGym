@@ -145,3 +145,25 @@ test('the alias table never points at an id the catalogue lost', () => {
     if (v && v.startsWith('#')) assert.ok(EXIDX[v.slice(1)], `${name} → ${v} is not in the catalogue`);
   }
 });
+
+test('a forced custom recognises itself on a second import', () => {
+  // It is stored with the " o <alternativa>" tail that cleanName strips, so comparing only the
+  // cleaned form made it fail to match itself and duplicate on every re-import.
+  const c = ctx();
+  const first = resolveExercise({ name: 'Superman o pájaro-perro' }, c);
+  assert.equal(first.via, 'custom-new');
+
+  // Second import: the profile now holds it, and the same payload arrives again.
+  const c2 = { customEx: [...c.newCustom], newCustom: [], uid: () => 'should-not-be-called' };
+  const second = resolveExercise({ name: 'Superman o pájaro-perro' }, c2);
+  assert.equal(second.via, 'custom-existing');
+  assert.equal(second.id, first.id);
+  assert.equal(c2.newCustom.length, 0, 'nothing new was invented');
+});
+
+test('a custom the user typed with a parenthesised note still matches', () => {
+  const c = { customEx: [{ id: 'legacy', n: 'Rueda abdominal (ab wheel)', bp: 'waist' }], newCustom: [], uid: () => 'x' };
+  // The importer would store this as 'Rueda abdominal'; the stored form keeps the note.
+  const r = resolveExercise({ name: 'Rueda abdominal (ab wheel)' }, c);
+  assert.ok(r.id, 'resolves to something');
+});

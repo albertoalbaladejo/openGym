@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 11 — Isi es la segunda usuaria real y ya tiene su plan importado (§15). La instancia es multiusuario de verdad.**
+Última actualización: **2026-09-07, sesión 12 — el plan de Isi pasa a 100% máquinas, con el core en suelo como excepción de seguridad (§16). Y un bug de duplicación de ejercicios propios, cazado por el dry-run.**
 
 ---
 
@@ -1404,3 +1404,103 @@ como sustitución de comandos. Lo enmendé con `--force-with-lease` un minuto de
 propio commit recién empujado y ningún commit del proyecto se tocó (los nueve anteriores siguen
 siendo ancestros de `main`, verificado), pero lo correcto habría sido añadir un commit de
 corrección en vez de enmendar. Queda anotado.
+
+---
+
+## 16. Sesión 12 — el plan de Isi, ahora solo con máquinas
+
+Revisión del plan de §15: todo el trabajo de fuerza pasa a máquinas del gimnasio (nada de
+mancuernas, barra libre ni suelo), **con una excepción deliberada**.
+
+### 16.1 La contradicción del encargo, y cómo se resolvió
+
+El encargo traía dos instrucciones incompatibles:
+
+* **§3** decía, textualmente, *"el core se queda en suelo (plancha/pájaro-perro)… No sustituyas
+  estos dos ejercicios por una máquina de abdominales tradicional si esa máquina fuerza flexión
+  de columna — eso sería peor para ella"*.
+* **§2**, el payload, quitaba la plancha de A y C, borraba el Superman de B, y metía en A
+  *"Abdominales en máquina, rango corto y suave"* — que resuelve a **`lever seated crunch`**: la
+  máquina de crunch sentado, es decir, **flexión lumbar bajo carga**. Exactamente lo que §3 dice
+  evitar.
+
+No es una ambigüedad de estilo: una lectura le quita a una persona con hernia lumbar el único
+trabajo de core sin flexión que tenía, y la otra ignora el JSON entregado. **Se preguntó antes de
+escribir. Decisión de Alberto: mantener la excepción de §3.**
+
+Resultado: el resto del plan es 100 % máquinas, y el core vuelve al suelo —
+**`Plancha frontal`** en A y C, **`Superman o pájaro-perro`** en B. Fuera el crunch en máquina.
+Ambos llevan en la nota, además de sus indicaciones, la frase
+`excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina`,
+para que la razón viaje con el ejercicio y no se pierda en un documento.
+
+**Por qué el core no puede ser una máquina, en una frase:** una plancha y un pájaro-perro son
+isométricos que enseñan a la columna a *no* moverse bajo carga; una máquina de abdominales hace
+justo lo contrario, flexionarla contra resistencia. Para una hernia discal, esa diferencia es el
+ejercicio entero. Si el gimnasio de Isi tiene una máquina de core **isométrico** (algunas existen),
+puede probarla — pero como alternativa, no como sustitución obligatoria.
+
+### 16.2 Un bug de duplicación, cazado por el dry-run
+
+El primer dry-run avisó de `1 created as custom: Superman o pájaro-perro`, cuando Isi **ya lo
+tenía** de la importación anterior. Bug introducido en la sesión 11:
+
+`custom()` buscaba un ejercicio propio existente comparando `normalizeStr(cleanName(c.n))` contra
+el nombre entrante. Pero un **custom forzado** se guarda con su cola `" o <alternativa>"` intacta
+(§15.2, punto 3), y `cleanName` la corta — así que `"Superman o pájaro-perro"` se comparaba como
+`"superman"` y **no se reconocía a sí mismo**. Habría creado un duplicado en cada import.
+
+Arreglado comparando contra el nombre guardado **en sus dos formas**, tal cual y tal como lo
+dejaría `cleanName`. Así un custom forzado se reconoce, y uno que el usuario escribió en la app
+con una nota entre paréntesis sigue encontrándose. **Dos tests nuevos**, uno por caso.
+
+Verificado que no hay regresión: el plan de Alberto resuelve los mismos 58 *matched* / 8 propios,
+con nombres idénticos a los que tiene vivos, y **un reimport sobre su estado real crea 0 rutinas
+y 0 ejercicios propios, reusando los 8**. Tests **59 → 61**.
+
+### 16.3 Resolución: 23 de 23, cero ejercicios propios nuevos
+
+Todo resolvió contra el catálogo, sin ampliar la tabla de alias. Los dos que pedías vigilar
+entraron limpios: `Contractor inverso (reverse pec deck)` → `lever seated reverse fly`, y
+`Curl de bíceps en máquina, agarre neutro tipo martillo` → `lever preacher curl`.
+
+**Un detalle que conviene saber:** ese curl "tipo martillo" resuelve al **mismo id** que el
+`Curl de bíceps en máquina` de A y C. La app no puede distinguirlos, así que compartirán historial
+y progresión como un único ejercicio. La instrucción del agarre viaja en la nota.
+
+### 16.4 El import
+
+```
+✓ imported  ·  profile yzOKOypIow2eC_gN
+  backup      state-yzOKOypIow2eC_gN.json.bak-2026-09-07T14-31-39-511Z
+  state_ts    1788791499511   (partía de 1788790388832, leído, no supuesto)
+  routines    0 created, 3 updated
+  exercises   22 matched in the catalogue, 0 created as custom, 3 custom reused
+```
+
+Actualización en sitio de las tres rutinas que ya tenía: mismos ids, así que su calendario y
+cualquier historial que hubiera registrado siguen enganchados. Copias previas:
+`data/state-yzOKOypIow2eC_gN.json.manual-20260907T142929Z` y
+`/home/ubuntu/state-isi-pre-maquinas-20260907T142929Z.json` (fuera del repo, `600`).
+
+### 16.5 Verificación en su state real
+
+`effectiveRoutine()`: **Lunes → Full Body A (8), Miércoles → Full Body B (9), Jueves → Full Body C
+(8)**, resto de la semana sin nada.
+
+Equipo de los 25 ejercicios, leído del catálogo:
+
+```
+leverage machine ×16 · cable ×5 · sled machine ×2 · propios ×3 (los dos de core)
+ejercicios con mancuerna o barra libre: 0
+```
+
+Las dos planchas en modo tiempo (`3 × 0:20`, progresión `time`), el Superman con `per_side`.
+
+### 16.6 Tu perfil, intacto
+
+```
+md5 antes del import de Isi:  0dfe6fb3efc9c8ed2198b0425cbbfb5b
+md5 después:                  0dfe6fb3efc9c8ed2198b0425cbbfb5b
+_ts 1788760990969 (sin cambios) | 23 rutinas | 32 dayPlan
+```

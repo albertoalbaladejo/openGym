@@ -1,12 +1,12 @@
 {
-  "plan": "Isi — fuerza y tono, 3 días/semana",
+  "plan": "Isi — fuerza y tono, solo máquinas (3 días/semana)",
   "start_date": "2026-09-07",
   "emit_deload_routines": false,
   "append_postural_to_training_days": false,
   "schedule_postural_on_rest_days": false,
   "phases": [
     {
-      "name": "Plan base — fuerza y tono",
+      "name": "Plan base — fuerza y tono (solo máquinas)",
       "prefix": "Isi",
       "weeks": [
         1,
@@ -67,7 +67,7 @@
               "sets": 3,
               "timed_s": "20-30",
               "progression": "time",
-              "note": "apoyada en rodillas si hace falta, parar si molesta la zona lumbar"
+              "note": "apoyada en rodillas si hace falta, parar si molesta la zona lumbar · excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
             }
           ]
         },
@@ -89,7 +89,7 @@
               "reps": "12-15"
             },
             {
-              "name": "Elevación de talones sentada",
+              "name": "Elevación de talones sentada en máquina",
               "sets": 3,
               "reps": "15"
             },
@@ -100,7 +100,7 @@
               "note": "nunca detrás de la nuca, torso recto"
             },
             {
-              "name": "Contractor inverso",
+              "name": "Contractor inverso (reverse pec deck)",
               "sets": 3,
               "reps": "15",
               "note": "deltoides posterior, sin carga en el cuello"
@@ -112,9 +112,10 @@
               "note": "rango controlado, parar si molesta el cuello"
             },
             {
-              "name": "Curl martillo con mancuernas",
+              "name": "Curl de bíceps en máquina, agarre neutro tipo martillo",
               "sets": 3,
-              "reps": "12-15"
+              "reps": "12-15",
+              "note": "agarre neutro; sustituye al curl martillo con mancuernas, mismo estímulo en máquina"
             },
             {
               "name": "Extensión de tríceps en máquina",
@@ -126,7 +127,7 @@
               "sets": 3,
               "reps": "10",
               "per_side": true,
-              "note": "por lado, ideal para zona lumbar, muy controlado"
+              "note": "por lado, ideal para zona lumbar, muy controlado · excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
             }
           ]
         },
@@ -148,7 +149,7 @@
               "reps": "12-15"
             },
             {
-              "name": "Elevación de talones sentada",
+              "name": "Elevación de talones sentada en máquina",
               "sets": 3,
               "reps": "15"
             },
@@ -177,7 +178,8 @@
               "name": "Plancha frontal",
               "sets": 3,
               "timed_s": "20-30",
-              "progression": "time"
+              "progression": "time",
+              "note": "excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
             }
           ]
         }
