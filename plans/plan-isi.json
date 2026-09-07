@@ -1,5 +1,5 @@
 {
-  "plan": "Isi — fuerza y tono, solo máquinas (3 días/semana)",
+  "plan": "Isi — fuerza y tono, 100% máquinas (3 días/semana)",
   "start_date": "2026-09-07",
   "emit_deload_routines": false,
   "append_postural_to_training_days": false,
@@ -63,11 +63,10 @@
               "note": "codos pegados al cuerpo"
             },
             {
-              "name": "Plancha frontal",
-              "sets": 3,
-              "timed_s": "20-30",
-              "progression": "time",
-              "note": "apoyada en rodillas si hace falta, parar si molesta la zona lumbar · excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
+              "name": "Abdominales en máquina",
+              "sets": 2,
+              "reps": "12-15",
+              "note": "rango corto y suave, sin forzar flexión lumbar completa — probar con cuidado la primera vez y parar si molesta la zona lumbar"
             }
           ]
         },
@@ -115,19 +114,12 @@
               "name": "Curl de bíceps en máquina, agarre neutro tipo martillo",
               "sets": 3,
               "reps": "12-15",
-              "note": "agarre neutro; sustituye al curl martillo con mancuernas, mismo estímulo en máquina"
+              "note": "agarre neutro; mismo estímulo que el curl martillo, en máquina"
             },
             {
               "name": "Extensión de tríceps en máquina",
               "sets": 3,
               "reps": "12-15"
-            },
-            {
-              "name": "Superman o pájaro-perro",
-              "sets": 3,
-              "reps": "10",
-              "per_side": true,
-              "note": "por lado, ideal para zona lumbar, muy controlado · excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
             }
           ]
         },
@@ -175,11 +167,10 @@
               "reps": "12-15"
             },
             {
-              "name": "Plancha frontal",
-              "sets": 3,
-              "timed_s": "20-30",
-              "progression": "time",
-              "note": "excepción a propósito: isométrico sin flexión de columna. NO sustituir por crunch en máquina"
+              "name": "Abdominales en máquina",
+              "sets": 2,
+              "reps": "12-15",
+              "note": "rango corto y suave, sin forzar flexión lumbar completa"
             }
           ]
         }

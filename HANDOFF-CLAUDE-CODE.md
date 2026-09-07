@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-07, sesión 12 — el plan de Isi pasa a 100% máquinas, con el core en suelo como excepción de seguridad (§16). Y un bug de duplicación de ejercicios propios, cazado por el dry-run.**
+Última actualización: **2026-09-07, sesión 13 — el plan de Isi queda 100% máquinas, sin excepciones: el core de suelo se sustituye por máquina de abdominales (§17).**
 
 ---
 
@@ -1504,3 +1504,97 @@ md5 antes del import de Isi:  0dfe6fb3efc9c8ed2198b0425cbbfb5b
 md5 después:                  0dfe6fb3efc9c8ed2198b0425cbbfb5b
 _ts 1788760990969 (sin cambios) | 23 rutinas | 32 dayPlan
 ```
+
+---
+
+## 17. Sesión 13 — el plan de Isi, sin ninguna excepción de suelo
+
+**Revierte la decisión de §16.1.** En la sesión 12 se preguntó explícitamente y Alberto eligió
+mantener plancha y pájaro-perro en el suelo por seguridad lumbar. Ahora pide lo contrario:
+sustituirlos por máquina de abdominales, cero suelo.
+
+**No se volvió a discutir.** El encargo lo pide con la contrapartida ya reconocida por escrito
+(*"la máquina de abdominales sustituye a los ejercicios isométricos de suelo que son, en general,
+más suaves para una hernia lumbar — vale la pena que la primera vez que Isi la use vaya con
+cuidado y pare si nota molestia"*). Es una decisión informada del dueño de la instancia y del
+plan; la objeción ya se planteó una vez y se registró en §16.1, que sigue ahí para consultarla.
+
+### 17.1 Qué se hizo
+
+| | Antes (§16) | Ahora |
+|---|---|---|
+| Full Body A | 7 máquinas + **Plancha frontal** (suelo, 3 × 0:20) | 7 máquinas + **`lever seated crunch`** (2 × 12-15) |
+| Full Body B | 8 máquinas + **Superman o pájaro-perro** (suelo, 3 × 8-10) | **8 máquinas**, sin core |
+| Full Body C | 7 máquinas + **Plancha frontal** (suelo, 3 × 0:20) | 7 máquinas + **`lever seated crunch`** (2 × 12-15) |
+
+Actualización por nombre (`Isi · Full Body A/B/C` ya existían): **0 creadas, 3 actualizadas**, con
+los mismos ids (`mtrbegcb9iwwc`, `mtrbegcb9sorj`, `mtrbegcbuoi5g`), así que su calendario sigue
+enganchado. **`prune_phase_routines` no hizo falta** y se dejó desactivado: los nombres no
+cambian, luego no hay rutinas huérfanas que borrar.
+
+### 17.2 Resolución: 24 de 24, cero ejercicios propios
+
+Sin ampliar la tabla de alias. Los dos que pedías vigilar entraron limpios:
+
+* `Abdominales en máquina` → **`lever seated crunch`** `[leverage machine]`
+* `Contractor inverso (reverse pec deck)` → **`lever seated reverse fly`** `[leverage machine]`
+
+Equipos usados en todo el plan: `leverage machine` ×17, `cable` ×5, `sled machine` ×2.
+
+### 17.3 El import
+
+```
+✓ imported  ·  profile yzOKOypIow2eC_gN
+  backup      state-yzOKOypIow2eC_gN.json.bak-2026-09-07T15-13-10-510Z
+  state_ts    1788793990510   (partía de 1788793373472, leído del disco — había vuelto a
+                               cambiar desde la sesión anterior: está usando la app)
+  routines    0 created, 3 updated
+  exercises   24 matched in the catalogue, 0 created as custom, 0 custom reused
+```
+
+Copias previas: `data/state-yzOKOypIow2eC_gN.json.manual-20260907T151302Z` y
+`/home/ubuntu/state-isi-pre-solomaquinas-20260907T151302Z.json` (fuera del repo, `600`).
+
+### 17.4 Auditoría del resultado, sobre su state real
+
+`effectiveRoutine()`: **Lunes → Full Body A (8), Miércoles → Full Body B (8), Jueves → Full Body C
+(8)**, resto de la semana sin nada.
+
+Los 24 ejercicios, leyendo el equipo del catálogo: **0 con `body weight`, `dumbbell`, `barbell`,
+`kettlebell`, `band` o `assisted`. 0 ejercicios propios.** Y una búsqueda de texto sobre las
+rutinas escritas:
+
+```
+suelo · plancha · pajaro · superman · mancuerna · barra libre · bodyweight · rodillas
+→ ninguna de esas palabras aparece en ningún nombre ni en ninguna nota
+```
+
+**Queda un residuo, sin efecto sobre el plan:** `Plancha frontal` y `Superman o pájaro-perro`
+siguen en su `customEx` —su biblioteca personal de ejercicios— pero **huérfanos**: ninguna rutina
+los usa. El endpoint no borra ejercicios propios (`prune_phase_routines` sólo alcanza rutinas), y
+no se editó su fichero a mano. En la práctica significa que aparecerán en su pestaña Ejercicios
+como ejercicios suyos, por si algún día quiere volver a añadirlos. Si molestan, se borran desde la
+app en dos toques.
+
+### 17.5 El perfil de Alberto: el md5 cambió, y NO fue el import
+
+Registrado tal cual, porque la comprobación de rutina habría dado un falso positivo:
+
+```
+md5 antes:  0dfe6fb3efc9c8ed2198b0425cbbfb5b
+md5 ahora:  5e553e1a4d5dc4b316ddc5cae7fdf3ec
+```
+
+Diff campo a campo del fichero completo: **cambia exactamente un campo, `_ts`**
+(`1788760990969` → `1788793993872`). `routines`, `week`, `dayPlan`, `customEx` y `workouts`
+byte-idénticos.
+
+Tres pruebas de que fue su propia app y no el import:
+
+1. **No existe backup automático nuevo** para su perfil. El endpoint copia el estado antes de cada
+   escritura; el último `state-3TR-…json.bak-*` es del **2 de septiembre**.
+2. **Los seis `import.plan` del audit log de hoy** llevan `uid: yzOKOypIow2eC_gN`. Ninguno el suyo.
+3. El `_ts` nuevo (`…993872`) es **3 segundos posterior** al del import de Isi (`…990510`): una
+   sincronización de la app, que no pasa por el endpoint ni queda auditada.
+
+**Su plan no se tocó. Lo que se movió es la marca de sincronización, por su propio uso.**
