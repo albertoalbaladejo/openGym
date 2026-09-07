@@ -95,7 +95,18 @@ limitación oculta**: acepta un plan de fuerza para uno y uno de resistencia par
 
 ## 2. Riesgos reales, que conviene decidir antes de dar de alta a nadie
 
-### 2.1 🔴 El registro está abierto y **no te enterarías**
+### 2.1 ✅ RESUELTO (2026-09-07) — El registro está cerrado y hay panel
+
+> **Estado: resuelto.** Aplicado en `.env` el 2026-09-07 y verificado en producción:
+> `GET /api/config` responde `{"invite_only":true,"allow_guest":false}`, un alta sin código
+> devuelve `403 {"error":"a valid invite code is required"}`, y `ADMIN_UIDS` lleva el uid real.
+> El ciclo completo (acuñar código → alta → el mismo código rechazado la segunda vez) y las
+> cuatro capacidades del panel se probaron de punta a punta con una ceremonia WebAuthn real
+> sobre una instancia aislada. Detalle en `HANDOFF-CLAUDE-CODE.md` §12.
+>
+> Lo de abajo es el diagnóstico original, que se conserva porque explica **por qué** se hizo.
+
+#### El diagnóstico original: el registro estaba abierto y no te enterarías
 
 `GET /api/config` responde hoy `{"invite_only":false,"allow_guest":true}`. Cualquiera con la URL
 pulsa *Create new profile*, pone un nombre y crea una cuenta con su passkey. No hace falta ninguna
@@ -118,7 +129,7 @@ varias personas, el subdominio deja de ser secreto (historiales de navegador, me
 certificate transparency — `gym.albertoalbaladejo.com` es público desde que Certbot emitió el
 certificado, y ese log lo rastrean bots).
 
-### 2.2 🟡 Sí se puede cerrar el registro **sin escribir código**
+### 2.2 ✅ APLICADO — Se cerró el registro sin escribir código
 
 Existe entero en upstream y no está activado:
 
@@ -142,7 +153,11 @@ Qué te da, tras `docker compose up -d api`:
 * **Las cuentas que ya existen siguen funcionando.** `INVITE_ONLY` sólo mira el alta.
 
 Coste: 3 líneas en `.env` y un reinicio del contenedor `api`. **Cero código.** Es la palanca de
-mayor efecto que hay en todo este documento.
+mayor efecto que hay en todo este documento — **y es exactamente lo que se aplicó el 2026-09-07.**
+
+Un detalle que sólo se ve probándolo: **un alta rechazada también queda registrada**, como
+`auth.register.denied` con `msg: "invite-rejected"`. Así que el log no sólo dice quién entró:
+también dice quién lo intentó sin código.
 
 Lo que **no** existe y habría que construir: límite de nº de perfiles, aprobación manual
 (alta pendiente hasta que la apruebas), y caducidad de los códigos de invitación.
@@ -271,8 +286,8 @@ sólo requiere `.env`.
 
 | | **A — Alta manual** (tú creas el plan por chat, como el tuyo) | **B — Semi-automático** (cuestionario → LLM → import) | **C — Autoservicio** (cada uno importa lo suyo) |
 |---|---|---|---|
-| **Cerrar el registro** | `ADMIN_UIDS` + `INVITE_ONLY=1` en `.env`. **Ya existe** | igual | igual |
-| **Ver los perfiles** | el panel de admin que activa `ADMIN_UIDS`. **Ya existe** | igual | igual |
+| **Cerrar el registro** | ✅ **HECHO** (2026-09-07) | ✅ hecho | ✅ hecho |
+| **Ver los perfiles** | ✅ **HECHO** — panel activo | ✅ hecho | ✅ hecho |
 | **Importar planes** | el endpoint tal cual, con `--user`. **Ya funciona** | igual | **clave por usuario** (`data/tokens.json` + acuñado desde el panel) |
 | **`IMPORT_API_KEY`** | única global, correcta | única global, correcta | por usuario, `user_id` deducido del token |
 | **Rate limit** | sirve como está | **arreglar §2.3** (clavar el contador al `uid`, no al socket) | **imprescindible arreglarlo** |
@@ -282,8 +297,19 @@ sólo requiere `.env`.
 | **IP real en el log** | no hace falta | conveniente | **recomendable** (§2.5) |
 | **Trabajo nuevo total** | **prácticamente cero** — 3 líneas de `.env` | rate limit + alias + el generador | rate limit + alias + tokens + generador + UI |
 
-### Lo que yo haría hoy, decidas lo que decidas
+### Dónde está cada cosa ahora
 
-Poner `ADMIN_UIDS` e `INVITE_ONLY=1` **antes** de compartir la URL con nadie. Es un ajuste de
-`.env`, no toca código, no rompe tu cuenta, y convierte "cualquiera con la URL entra" en "sólo
-quien tenga un código que has generado tú". Todo lo demás puede esperar a que decidas el flujo.
+**Hecho y verificado (2026-09-07):** registro cerrado con `INVITE_ONLY=1`, panel de administración
+activo con `ADMIN_UIDS`, modo invitado retirado con `ALLOW_GUEST=0`. Cero código nuevo. La cuenta
+y el plan existentes, intactos.
+
+**Sigue abierto, a la espera de que decidas el flujo de alta** (manual / semi-automático /
+autoservicio) — es el resto de la tabla de arriba:
+
+* el *rate limit* global por IP de contenedor (§2.3) — no urge mientras seas el único que importa;
+* la clave de importación única (§2.4) — correcta mientras importes tú para todos;
+* la IP real en el log de actividad (§2.5);
+* la tabla de alias en español para objetivos distintos de la fuerza (§3);
+* y el generador de planes en sí, que es la decisión de producto de fondo.
+
+Ninguna de esas cinco es un riesgo abierto hoy: son trabajo que dependerá del flujo que elijas.

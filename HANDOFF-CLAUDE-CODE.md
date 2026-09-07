@@ -1,7 +1,7 @@
 # HANDOFF — openGym (Alberto)
 
 Estado vivo del trabajo. Se actualiza en cada paso.
-Última actualización: **2026-09-02, sesión 7 — plan rediseñado a 3 días/semana (Lun-Mié-Vie). PROYECTO CERRADO.**
+Última actualización: **2026-09-07, sesión 9 — registro cerrado (INVITE_ONLY) y panel de admin activo. Solo configuración, cero código.**
 
 ---
 
@@ -896,3 +896,121 @@ Cero rutinas `Torso`/`Pierna` restantes.
 * **Un aviso nuevo:** ahora existe `prune_phase_routines`. Si en el futuro te renombro o fusiono
   rutinas, las viejas se borran. Por eso sigue en pie lo de **no renombrar tú las rutinas** si
   quieres poder reimportar: el emparejamiento es por nombre.
+
+---
+
+## 12. Sesión 9 — registro cerrado y panel de administración
+
+Sólo `.env` + reinicio del contenedor `api`. **Ningún código nuevo, ningún commit de código.**
+
+### 12.1 `.env`: antes y después
+
+Copia previa: **`.env.bak-20260907T074425Z`** (`chmod 600`, junto al `.env`).
+
+| | antes | después |
+|---|---|---|
+| `ADMIN_UIDS` | *(sin definir)* → `[]` en el contenedor | `3TR-nhgjg3tPyw4R` |
+| `INVITE_ONLY` | *(sin definir)* → registro abierto | `1` |
+| `ALLOW_GUEST` | *(sin definir)* → invitado permitido | `0` |
+
+El uid **se leyó de `data/db.json`**, no de memoria: `'3TR-nhgjg3tPyw4R'`, perfil `Alberto`,
+creado `2026-09-02T12:24:47.463Z`. Coincidencia exacta con lo que el contenedor tiene cargado
+(`ADMIN_UIDS=[3TR-nhgjg3tPyw4R]`), sin espacios de más.
+
+El resto del `.env` no se tocó: `RP_ID`, `ORIGIN`, `WEB_PORT`, `AUDIT_IP` e `IMPORT_API_KEY`
+siguen igual.
+
+### 12.2 Verificado en producción
+
+```
+GET  /api/config                    → {"invite_only":true,"allow_guest":false}
+POST /api/register/options {name}   → 403 {"error":"a valid invite code is required"}
+POST /api/register/options +código inventado → 403
+GET  /api/admin/users (sin sesión)  → 401
+GET  /                              → 200
+GET  /api/health                    → {"ok":true,"users":1}
+```
+
+### 12.3 Verificado de punta a punta en una instancia aislada
+
+Los pasos 1.4, 1.5 y 1.7 necesitan una **sesión con passkey**, que no se puede fabricar desde
+aquí sin un autenticador. En vez de escribir un perfil de usar y tirar en el `db.json` real, se
+levantó una instancia aislada con **el mismo código y la misma configuración** y se hizo la
+ceremonia WebAuthn de verdad con un autenticador virtual (clave ES256, `attestationObject` CBOR
+con attestation `none`), verificado por el mismo `@simplewebauthn/server` que corre en producción.
+Secuencia idéntica a la tuya: registro **antes** de activar `INVITE_ONLY`, y luego reinicio con
+`ADMIN_UIDS` + `INVITE_ONLY=1` + `ALLOW_GUEST=0`.
+
+**1.4 — la cuenta existente sigue entrando, ya con `INVITE_ONLY=1`:**
+```
+POST /api/login/options  → 200
+POST /api/login/verify   → 200  {"id":"mcMohB8s_L4zkMaq","name":"Alberto-test","admin":true}
+```
+`INVITE_ONLY` se comprueba sólo en el alta (`api/server.js:628` y `:677`); el login no lo mira.
+
+**1.5 — las rutas de admin se abren:**
+```
+GET /api/me            → 200 {"user":{…,"admin":true}}   ← esto es lo que hace aparecer
+                                                            "Admin dashboard" en Ajustes
+GET /api/admin/users   → 200 (con sesión)
+GET /api/admin/users   → 401 (sin sesión)
+```
+
+**1.6 — alta sin código, rechazada:** `403 "a valid invite code is required"`, tanto sin `code`
+como con uno inventado.
+
+**1.7 — ciclo completo de invitación, un solo uso:**
+```
+POST /api/admin/invites/new        → 200  código 420617971E41A519
+alta CON ese código                → 200  {"id":"ThqJ2nsEbObKgZFs","name":"Invitado"}
+alta con el MISMO código otra vez  → 403  "a valid invite code is required"
+GET /api/admin/invites             → [{code:"420617971E41A519", usedBy:"ThqJ2nsEbObKgZFs", usedAt:…}]
+```
+
+**1.8 —** la instancia de prueba y sus dos perfiles se borraron enteros al terminar. **En
+producción no se creó ningún perfil de prueba**: sigue habiendo 1 usuario, 1 credencial y
+**0 invitaciones**.
+
+### 12.4 El panel, capacidad por capacidad (§2 del encargo)
+
+| Capacidad | Ruta | Evidencia |
+|---|---|---|
+| **Lista de perfiles** | `GET /api/admin/users` | 200. Por fila: `id, name, created, disabled, admin, invitedBy, workouts, lastWorkout, lastSync, hasPush, live`. Se vieron los dos perfiles, y el invitado con `invitedBy: "420617971E41A519"` — el panel dice **con qué código entró cada uno**. |
+| **Historial y peso de un perfil** | `GET /api/admin/user?id=…` | 200, devolviendo `user, unit, lastSync, routines, bodyweight, workouts`. |
+| **Desactivar / reactivar** | `POST /api/admin/user/disable` | `{"ok":true,"disabled":true}` → la lista pasa a `disabled: true`; reactivar lo devuelve a `false`. **Un admin no se puede desactivar a sí mismo**: `{"error":"cannot disable an admin"}`. |
+| **Audit log paginado desde el móvil** | `GET /api/admin/audit?limit=&before=` | 200. Devuelve `events, total, nextBefore, enabled, ip_mode, retention, now`. Paginación probada: página 1 (`nextBefore: 5`) → página 2. Sin SSH. |
+
+Hallazgo útil de paso: **un alta rechazada también se registra**, como
+`auth.register.denied` con `msg: "invite-rejected"`. El log no sólo dice quién entró; también
+quién lo intentó sin código.
+
+### 12.5 Tu cuenta y tu plan: sin tocar en ningún momento
+
+```
+usuarios: 1 | creds: 1 | invites: 0
+perfil:   Alberto  3TR-nhgjg3tPyw4R
+clave pública de la passkey: pQECAyYgASFYIFevLBhZL-X5…  (intacta)
+rutinas: 23 | customEx: 8 | dayPlan: 32 | _ts: 1788563782039  ← idéntico a antes del ajuste
+```
+
+`INVITE_ONLY` no toca cuentas existentes: sólo se consulta en `register/options` y
+`register/verify`. Ni `db.json` ni `state-3TR-nhgjg3tPyw4R.json` se reescribieron.
+
+### 12.6 Lo único que falta que compruebes tú
+
+No puedo iniciar sesión con **tu** passkey — vive en tu móvil. Lo que sí verifiqué es que tu uid
+coincide exactamente con `ADMIN_UIDS` en el contenedor, y que el mecanismo funciona con una
+passkey real sobre el mismo código. En tu móvil deberías ver, tras cerrar y reabrir la app:
+
+1. **Ajustes → un enlace nuevo "Admin dashboard"** (antes no estaba).
+2. Dentro: tu perfil listado, con `admin` marcado y sin entrenos.
+3. **Ya no aparece "Continuar sin cuenta"** en la pantalla de entrada (`ALLOW_GUEST=0`).
+4. Para dar de alta a alguien: panel → generar código → se lo pasas → lo escribe al crear su
+   perfil. Un solo uso, y podrás revocarlo antes de que lo gaste.
+
+### 12.7 Lo que NO se hizo, a propósito
+
+Sigue abierto y documentado en `docs/MULTIUSER_NOTES.md`, a la espera de que decidas el flujo:
+el *rate limit* global por IP de contenedor (§2.3), la clave de importación única (§2.4), la IP
+real en el log (§2.5) y la tabla de alias en español para objetivos distintos de la fuerza (§3).
+Ninguna es un riesgo abierto hoy.
